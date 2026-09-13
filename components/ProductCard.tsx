@@ -10,12 +10,13 @@ interface ProductCardProps {
   onAdd: (product: Product) => void;
 }
 
-export const ProductVisual: React.FC<{ product: Product; compact?: boolean }> = ({ product, compact }) => {
+export const ProductVisual: React.FC<{ product: Product; compact?: boolean; imageIndex?: number }> = ({ product, compact, imageIndex = 0 }) => {
   if (product.images && product.images.length > 0) {
+    const img = product.images[imageIndex] || product.images[0];
     return (
       <div className={`flex items-center justify-center overflow-hidden ${compact ? 'w-20 h-16 rounded-lg' : 'w-full h-40'}`}>
         <img 
-          src={product.images[0].url} 
+          src={img.url} 
           alt={product.name} 
           className="w-full h-full object-cover" 
         />
@@ -31,7 +32,9 @@ export const ProductVisual: React.FC<{ product: Product; compact?: boolean }> = 
 };
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, wished, onWish, onOpen, onAdd }) => {
+  const [imageIndex, setImageIndex] = React.useState(0);
   const saving = product.mrp - product.price;
+
   return (
     <article className="card bg-base-100 border border-base-300 overflow-hidden group">
       <div className="relative bg-base-200 p-5 cursor-pointer" onClick={() => onOpen(product)}>
@@ -39,9 +42,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, wished, onWis
         <button className="btn btn-circle btn-ghost btn-sm absolute right-2 top-2" aria-label="Save frame" onClick={(e) => { e.stopPropagation(); onWish(product); }}>
           <Heart size={17} className={wished ? 'fill-error text-error' : 'opacity-60'} />
         </button>
-        <ProductVisual product={product} />
-        <div className="flex justify-center gap-1.5 mt-5">
-          {product.colors.map((color) => <span key={color} className="h-3 w-3 rounded-full border border-base-content/30 bg-neutral" title={color} />)}
+        <ProductVisual product={product} imageIndex={imageIndex} />
+        
+        {/* Gallery Dots */}
+        <div className="flex justify-center gap-1.5 mt-5 h-3">
+          {product.images && product.images.length > 1 ? (
+            product.images.map((_, idx) => (
+              <span 
+                key={idx} 
+                onClick={(e) => { e.stopPropagation(); setImageIndex(idx); }}
+                className={`h-2 w-2 rounded-full transition-colors ${idx === imageIndex ? 'bg-primary' : 'bg-base-300 border border-base-content/30'}`} 
+              />
+            ))
+          ) : null}
         </div>
       </div>
       <div className="card-body p-4 gap-2">

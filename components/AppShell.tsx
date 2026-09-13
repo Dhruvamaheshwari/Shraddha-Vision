@@ -64,7 +64,115 @@ const SettingsIcon: React.FC = () => <span className="text-base-content/70"><Pen
 interface OverlayProps { modal: Modal; selected: Product | null; cart: CartLine[]; total: number; discount: number; payable: number; setModal: (modal: Modal) => void; addToCart: (product: Product) => void; setQuantity: (id: string, delta: number) => void; checkoutComplete: boolean; setCheckoutComplete: (v: boolean) => void; toast: (message: string, tone?: ToastMessage['tone']) => void; wished: string[]; onWish: (product: Product) => void; }
 const Overlay: React.FC<OverlayProps> = ({ modal, selected, cart, total, discount, payable, setModal, addToCart, setQuantity, checkoutComplete, setCheckoutComplete, toast, wished, onWish }) => { const close = () => setModal(null); return <div className="modal modal-open" role="dialog"><div className={`modal-box ${modal === 'product' ? 'max-w-4xl' : modal === 'cart' ? 'max-w-2xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto`}><button className="btn btn-circle btn-sm btn-ghost absolute right-3 top-3" onClick={close} aria-label="Close"><X size={16} /></button>{modal === 'product' && selected && <ProductModal product={selected} onClose={close} addToCart={addToCart} toast={toast} wished={wished.includes(selected.id)} onWish={() => onWish(selected)} />}{modal === 'cart' && <CartModal cart={cart} total={total} discount={discount} payable={payable} setQuantity={setQuantity} close={close} checkoutComplete={checkoutComplete} setCheckoutComplete={setCheckoutComplete} toast={toast} />}{modal === 'account' && <AccountModal setModal={setModal} toast={toast} />}{modal === 'appointment' && <AppointmentModal close={close} toast={toast} />}{modal === 'support' && <SupportModal close={close} toast={toast} />}{modal === 'prescription' && <PrescriptionModal close={close} toast={toast} />}</div><div className="modal-backdrop" onClick={close} /></div>; };
 
-const ProductModal: React.FC<{ product: Product; onClose: () => void; addToCart: (p: Product) => void; toast: OverlayProps['toast']; wished: boolean; onWish: () => void }> = ({ product, onClose, addToCart, toast, wished, onWish }) => { const [lens, setLens] = useState(product.lens[0]); const [prescription, setPrescription] = useState('Use saved prescription'); return <div><div className="grid md:grid-cols-2 gap-6 mt-3"><div className="rounded-2xl bg-base-200 min-h-72 flex items-center justify-center relative"><span className="badge badge-primary absolute top-3 left-3">{product.tag}</span><ProductVisual product={product} /></div><div><div className="flex justify-between gap-3"><div><p className="text-xs text-base-content/60">{product.code} · {product.brand}</p><h2 className="text-3xl font-black mt-1">{product.name}</h2></div><button className="btn btn-circle btn-ghost" onClick={onWish}><Heart className={wished ? 'fill-error text-error' : ''} /></button></div><div className="flex items-center gap-2 mt-3"><span className="font-bold text-xl">₹{product.price.toLocaleString('en-IN')}</span><del className="text-sm text-base-content/40">₹{product.mrp.toLocaleString('en-IN')}</del><span className="badge badge-success badge-sm">{Math.round((1 - product.price / product.mrp) * 100)}% off</span></div><div className="divider my-4" /><p className="text-sm font-semibold">Choose your lens</p><div className="grid grid-cols-2 gap-2 mt-2">{product.lens.map((option) => <button key={option} className={`btn btn-sm justify-start ${lens === option ? 'btn-primary' : 'btn-outline'}`} onClick={() => setLens(option)}>{lens === option && <Check size={14} />}{option}</button>)}</div><p className="text-sm font-semibold mt-5">Prescription</p><select className="select select-bordered w-full mt-2" value={prescription} onChange={(e) => setPrescription(e.target.value)}><option>Use saved prescription</option><option>Enter prescription later</option><option>Upload prescription</option></select><div className="flex gap-2 mt-5"><button className="btn btn-primary flex-1" onClick={() => { addToCart(product); onClose(); }}><ShoppingBag size={17} /> Add to bag</button><button className="btn btn-secondary" onClick={() => { addToCart(product); onClose(); setTimeout(() => toast('Ready for checkout in your bag', 'info'), 100); }}>Buy now</button></div><div className="flex items-center gap-3 text-xs text-base-content/60 mt-5"><span className="flex items-center gap-1"><ShieldCheck size={14} /> 14-day returns</span><span className="flex items-center gap-1"><TruckIcon /> Free shipping</span></div></div></div><div className="grid grid-cols-3 gap-2 mt-6"><div className="rounded-xl bg-base-200 p-3 text-center"><p className="font-semibold text-sm">{product.shape}</p><p className="text-xs text-base-content/60">Shape</p></div><div className="rounded-xl bg-base-200 p-3 text-center"><p className="font-semibold text-sm">{product.size}</p><p className="text-xs text-base-content/60">Fit</p></div><button className="rounded-xl bg-secondary/15 text-secondary p-3 text-center" onClick={() => toast('Virtual try-on needs camera permission in the full app', 'info')}><Sparkles size={16} className="mx-auto" /><p className="font-semibold text-sm mt-1">Try on</p></button></div></div> };
+const ProductModal: React.FC<{ product: Product; onClose: () => void; addToCart: (p: Product) => void; toast: OverlayProps['toast']; wished: boolean; onWish: () => void }> = ({ product, onClose, addToCart, toast, wished, onWish }) => { 
+  const [lens, setLens] = useState(product.lens[0]); 
+  const [prescription, setPrescription] = useState('Use saved prescription'); 
+  const [imageIndex, setImageIndex] = useState(0);
+
+  return (
+    <div>
+      <div className="grid md:grid-cols-2 gap-6 mt-3">
+        <div className="rounded-2xl bg-base-200 min-h-72 flex flex-col items-center justify-center relative overflow-hidden group">
+          {product.tag && <span className="badge badge-primary absolute top-3 left-3 z-10">{product.tag}</span>}
+          
+          <ProductVisual product={product} imageIndex={imageIndex} />
+          
+          {/* Gallery Controls */}
+          {product.images && product.images.length > 1 && (
+            <>
+              <button 
+                className="btn btn-circle btn-sm absolute left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity" 
+                onClick={(e) => { e.stopPropagation(); setImageIndex(i => Math.max(0, i - 1)); }} 
+                disabled={imageIndex === 0}
+              >❮</button>
+              <button 
+                className="btn btn-circle btn-sm absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity" 
+                onClick={(e) => { e.stopPropagation(); setImageIndex(i => Math.min(product.images!.length - 1, i + 1)); }} 
+                disabled={imageIndex === product.images!.length - 1}
+              >❯</button>
+              
+              <div className="absolute bottom-4 flex gap-1.5">
+                {product.images.map((_, idx) => (
+                  <span 
+                    key={idx} 
+                    onClick={(e) => { e.stopPropagation(); setImageIndex(idx); }}
+                    className={`h-2 w-2 rounded-full cursor-pointer transition-colors border border-base-content/30 ${idx === imageIndex ? 'bg-primary' : 'bg-base-300'}`} 
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        
+        <div>
+          <div className="flex justify-between gap-3">
+            <div>
+              <p className="text-xs text-base-content/60">{product.code} · {product.brand}</p>
+              <h2 className="text-3xl font-black mt-1">{product.name}</h2>
+            </div>
+            <button className="btn btn-circle btn-ghost" onClick={onWish}>
+              <Heart className={wished ? 'fill-error text-error' : ''} />
+            </button>
+          </div>
+          
+          <div className="flex items-center gap-2 mt-3">
+            <span className="font-bold text-xl">₹{product.price.toLocaleString('en-IN')}</span>
+            <del className="text-sm text-base-content/40">₹{product.mrp.toLocaleString('en-IN')}</del>
+            <span className="badge badge-success badge-sm">{Math.round((1 - product.price / product.mrp) * 100)}% off</span>
+          </div>
+          
+          <div className="divider my-4" />
+          
+          <p className="text-sm font-semibold">Choose your lens</p>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            {product.lens.map((option) => (
+              <button key={option} className={`btn btn-sm justify-start ${lens === option ? 'btn-primary' : 'btn-outline'}`} onClick={() => setLens(option)}>
+                {lens === option && <Check size={14} />}
+                {option}
+              </button>
+            ))}
+          </div>
+          
+          <p className="text-sm font-semibold mt-5">Prescription</p>
+          <select className="select select-bordered w-full mt-2" value={prescription} onChange={(e) => setPrescription(e.target.value)}>
+            <option>Use saved prescription</option>
+            <option>Enter prescription later</option>
+            <option>Upload prescription</option>
+          </select>
+          
+          <div className="flex gap-2 mt-5">
+            <button className="btn btn-primary flex-1" onClick={() => { addToCart(product); onClose(); }}>
+              <ShoppingBag size={17} /> Add to bag
+            </button>
+            <button className="btn btn-secondary" onClick={() => { addToCart(product); onClose(); setTimeout(() => toast('Ready for checkout in your bag', 'info'), 100); }}>
+              Buy now
+            </button>
+          </div>
+          
+          <div className="flex items-center gap-3 text-xs text-base-content/60 mt-5">
+            <span className="flex items-center gap-1"><ShieldCheck size={14} /> 14-day returns</span>
+            <span className="flex items-center gap-1"><TruckIcon /> Free shipping</span>
+          </div>
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-3 gap-2 mt-6">
+        <div className="rounded-xl bg-base-200 p-3 text-center">
+          <p className="font-semibold text-sm">{product.shape}</p>
+          <p className="text-xs text-base-content/60">Shape</p>
+        </div>
+        <div className="rounded-xl bg-base-200 p-3 text-center">
+          <p className="font-semibold text-sm">{product.size}</p>
+          <p className="text-xs text-base-content/60">Fit</p>
+        </div>
+        <button className="rounded-xl bg-secondary/15 text-secondary p-3 text-center" onClick={() => toast('Virtual try-on needs camera permission in the full app', 'info')}>
+          <Sparkles size={16} className="mx-auto" />
+          <p className="font-semibold text-sm mt-1">Try on</p>
+        </button>
+      </div>
+    </div>
+  );
+};
 const TruckIcon: React.FC = () => <Package size={14} />;
 
 const CartModal: React.FC<{ cart: CartLine[]; total: number; discount: number; payable: number; setQuantity: (id: string, delta: number) => void; close: () => void; checkoutComplete: boolean; setCheckoutComplete: (v: boolean) => void; toast: OverlayProps['toast'] }> = ({ cart, total, discount, payable, setQuantity, close, checkoutComplete, setCheckoutComplete, toast }) => {
