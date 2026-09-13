@@ -10,11 +10,25 @@ interface ProductCardProps {
   onAdd: (product: Product) => void;
 }
 
-export const ProductVisual: React.FC<{ product: Product; compact?: boolean }> = ({ product, compact }) => (
-  <div className={`frame-visual shape-${product.shape.toLowerCase().replace('-', '')} ${compact ? 'frame-visual-compact' : ''}`} aria-label={`${product.shape} frame illustration`}>
-    <span className="lens left" /><span className="bridge" /><span className="lens right" /><span className="temple left-temple" /><span className="temple right-temple" />
-  </div>
-);
+export const ProductVisual: React.FC<{ product: Product; compact?: boolean }> = ({ product, compact }) => {
+  if (product.images && product.images.length > 0) {
+    return (
+      <div className={`flex items-center justify-center overflow-hidden ${compact ? 'w-20 h-16 rounded-lg' : 'w-full h-40'}`}>
+        <img 
+          src={product.images[0].url} 
+          alt={product.name} 
+          className="w-full h-full object-cover" 
+        />
+      </div>
+    );
+  }
+  
+  return (
+    <div className={`frame-visual shape-${product.shape.toLowerCase().replace('-', '')} ${compact ? 'frame-visual-compact' : ''}`} aria-label={`${product.shape} frame illustration`}>
+      <span className="lens left" /><span className="bridge" /><span className="lens right" /><span className="temple left-temple" /><span className="temple right-temple" />
+    </div>
+  );
+};
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, wished, onWish, onOpen, onAdd }) => {
   const saving = product.mrp - product.price;

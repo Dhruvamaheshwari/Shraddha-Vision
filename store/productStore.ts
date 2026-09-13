@@ -11,8 +11,8 @@ interface ProductState {
   total: number;
   totalPages: number;
   fetchFrames: (params?: { search?: string; category?: string; page?: number; limit?: number; includeInactive?: boolean }) => Promise<void>;
-  createFrame: (frameData: Partial<Product>) => Promise<void>;
-  updateFrame: (id: string, frameData: Partial<Product>) => Promise<void>;
+  createFrame: (frameData: Partial<Product> | FormData) => Promise<void>;
+  updateFrame: (id: string, frameData: Partial<Product> | FormData) => Promise<void>;
   deleteFrame: (id: string) => Promise<void>;
 }
 
@@ -45,8 +45,12 @@ const useProductStore = create<ProductState>((set, get) => ({
   createFrame: async (frameData) => {
     try {
       const token = localStorage.getItem('token');
+      const isFormData = frameData instanceof FormData;
       await axios.post('http://localhost:5000/api/frames', frameData, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          ...(isFormData ? { 'Content-Type': 'multipart/form-data' } : {})
+        }
       });
       get().fetchFrames();
     } catch (err: any) {
@@ -57,8 +61,12 @@ const useProductStore = create<ProductState>((set, get) => ({
   updateFrame: async (id, frameData) => {
     try {
       const token = localStorage.getItem('token');
+      const isFormData = frameData instanceof FormData;
       await axios.patch(`http://localhost:5000/api/frames/${id}`, frameData, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          ...(isFormData ? { 'Content-Type': 'multipart/form-data' } : {})
+        }
       });
       get().fetchFrames();
     } catch (err: any) {

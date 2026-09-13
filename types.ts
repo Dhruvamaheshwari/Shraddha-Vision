@@ -20,6 +20,7 @@ export interface Product {
   category: string;
   lens: string[];
   tag?: string;
+  images?: { url: string; publicId: string }[];
 }
 
 export interface CartLine {

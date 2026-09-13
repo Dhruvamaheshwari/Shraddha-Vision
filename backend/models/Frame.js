@@ -17,7 +17,11 @@ const frameSchema = new mongoose.Schema({
   lens: [{ type: String }],
   tag: { type: String },
   discount: { type: Number, default: 0 },
-  description: { type: String, default: '' }
+  description: { type: String, default: '' },
+  images: [{
+    url: String,
+    publicId: String
+  }]
 }, {
   timestamps: true
 });

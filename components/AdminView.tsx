@@ -196,7 +196,26 @@ const ProductsAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
     </>
   );
 };
-const ProductMini: React.FC<{ product: Product }> = ({ product }) => <div className="frame-visual frame-visual-compact"><span className="lens left" /><span className="bridge" /><span className="lens right" /></div>;
+const ProductMini: React.FC<{ product: Product }> = ({ product }) => {
+  if (product.images && product.images.length > 0) {
+    // Return the actual image using Cloudinary URL
+    return (
+      <img 
+        src={product.images[0].url} 
+        alt={product.name || 'Product'} 
+        className="w-[87px] h-full object-cover rounded" 
+      />
+    );
+  }
+  // Fallback CSS representation
+  return (
+    <div className="frame-visual frame-visual-compact">
+      <span className="lens left" />
+      <span className="bridge" />
+      <span className="lens right" />
+    </div>
+  );
+};
 const AddProduct: React.FC<{ product?: Product | null; onClose: () => void; toast: (m: string, t?: 'success'|'error') => void }> = ({ product, onClose, toast }) => {
   const { createFrame, updateFrame } = useProductStore();
   const [formData, setFormData] = useState({
@@ -214,22 +233,90 @@ const AddProduct: React.FC<{ product?: Product | null; onClose: () => void; toas
     lens: product?.lens?.join(', ') || '',
   });
 
+  const [newImages, setNewImages] = useState<File[]>([]);
+  const [existingImages, setExistingImages] = useState<{url: string, publicId: string}[]>(product?.images || []);
+  const [imagesToRemove, setImagesToRemove] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Cleanup object URLs to avoid memory leaks
+  useEffect(() => {
+    return () => {
+      newImages.forEach(file => {
+        if ((file as any).preview) URL.revokeObjectURL((file as any).preview);
+      });
+    };
+  }, [newImages]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const files = Array.from(e.target.files);
+    
+    // Validate count
+    if (existingImages.length + newImages.length + files.length > 5) {
+      toast('Maximum 5 images allowed per product', 'error');
+      return;
+    }
+
+    const validFiles = files.filter(file => {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        toast(`Invalid file type: ${file.name}. Only JPEG, PNG, WEBP allowed.`, 'error');
+        return false;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast(`File too large: ${file.name}. Max 5MB allowed.`, 'error');
+        return false;
+      }
+      (file as any).preview = URL.createObjectURL(file);
+      return true;
+    });
+
+    setNewImages(prev => [...prev, ...validFiles]);
+  };
+
+  const removeNewImage = (index: number) => {
+    const file = newImages[index];
+    if ((file as any).preview) URL.revokeObjectURL((file as any).preview);
+    setNewImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeExistingImage = (publicId: string) => {
+    setExistingImages(prev => prev.filter(img => img.publicId !== publicId));
+    setImagesToRemove(prev => [...prev, publicId]);
+  };
+
   const handleSave = async () => {
     if (!formData.name || !formData.code || !formData.price || !formData.category) {
       toast('Name, Code, Category, and Price are required', 'error');
       return;
     }
     
-    const payload = {
-      ...formData,
-      id: formData.code.toLowerCase(), // mapping code to 'id' for backend
-      price: Number(formData.price),
-      mrp: Number(formData.mrp) || Number(formData.price),
-      stock: Number(formData.stock),
-      lowStockThreshold: Number(formData.lowStockThreshold),
-      colors: formData.colors.split(',').map(s => s.trim()).filter(Boolean),
-      lens: formData.lens.split(',').map(s => s.trim()).filter(Boolean),
-    };
+    setIsUploading(true);
+
+    const payload = new FormData();
+    payload.append('name', formData.name);
+    payload.append('code', formData.code);
+    payload.append('brand', formData.brand);
+    payload.append('category', formData.category);
+    payload.append('price', String(formData.price));
+    payload.append('mrp', String(Number(formData.mrp) || Number(formData.price)));
+    payload.append('stock', String(formData.stock));
+    payload.append('lowStockThreshold', String(formData.lowStockThreshold));
+    payload.append('shape', formData.shape);
+    payload.append('size', formData.size);
+    
+    const colorsArr = formData.colors.split(',').map(s => s.trim()).filter(Boolean);
+    colorsArr.forEach(c => payload.append('colors', c));
+    
+    const lensArr = formData.lens.split(',').map(s => s.trim()).filter(Boolean);
+    lensArr.forEach(l => payload.append('lens', l));
+
+    if (imagesToRemove.length > 0) {
+      payload.append('imagesToRemove', JSON.stringify(imagesToRemove));
+    }
+
+    newImages.forEach(file => {
+      payload.append('images', file);
+    });
 
     try {
       if (product) {
@@ -241,29 +328,32 @@ const AddProduct: React.FC<{ product?: Product | null; onClose: () => void; toas
       }
       onClose();
     } catch (err: any) {
-      toast(err.response?.data?.message || 'Failed to save product', 'error');
+      const errMsg = err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to save product';
+      toast(errMsg, 'error');
+    } finally {
+      setIsUploading(false);
     }
   };
 
   return (
     <div className="modal modal-open">
       <div className="modal-box max-w-2xl">
-        <button className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3" onClick={onClose}><X size={16} /></button>
+        <button className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3" onClick={onClose} disabled={isUploading}><X size={16} /></button>
         <h3 className="font-bold text-xl">{product ? 'Edit product' : 'Add product'}</h3>
         <p className="text-sm text-base-content/60 mt-1">Manage product catalog details.</p>
         
         <div className="grid sm:grid-cols-2 gap-3 mt-6">
           <label className="form-control"><span className="label-text text-sm">Product name *</span>
-            <input className="input input-bordered" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Anika Soft Square" />
+            <input className="input input-bordered" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Anika Soft Square" disabled={isUploading} />
           </label>
           <label className="form-control"><span className="label-text text-sm">Product code *</span>
-            <input className="input input-bordered" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value})} placeholder="NO-111" disabled={!!product} />
+            <input className="input input-bordered" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value})} placeholder="NO-111" disabled={!!product || isUploading} />
           </label>
           <label className="form-control"><span className="label-text text-sm">Brand</span>
-            <input className="input input-bordered" value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} placeholder="Nayan House" />
+            <input className="input input-bordered" value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} placeholder="Nayan House" disabled={isUploading} />
           </label>
           <label className="form-control"><span className="label-text text-sm">Category *</span>
-            <select className="select select-bordered" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
+            <select className="select select-bordered" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} disabled={isUploading}>
               <option>Eyeglasses</option>
               <option>Sunglasses</option>
               <option>Blue-light</option>
@@ -272,31 +362,83 @@ const AddProduct: React.FC<{ product?: Product | null; onClose: () => void; toas
             </select>
           </label>
           <label className="form-control"><span className="label-text text-sm">Price (₹) *</span>
-            <input className="input input-bordered" type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} placeholder="1999" />
+            <input className="input input-bordered" type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} placeholder="1999" disabled={isUploading} />
           </label>
           <label className="form-control"><span className="label-text text-sm">MRP (₹)</span>
-            <input className="input input-bordered" type="number" value={formData.mrp} onChange={e => setFormData({...formData, mrp: e.target.value})} placeholder="2499" />
+            <input className="input input-bordered" type="number" value={formData.mrp} onChange={e => setFormData({...formData, mrp: e.target.value})} placeholder="2499" disabled={isUploading} />
           </label>
           <label className="form-control"><span className="label-text text-sm">Stock Quantity</span>
-            <input className="input input-bordered" type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} placeholder="0" />
+            <input className="input input-bordered" type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} placeholder="0" disabled={isUploading} />
           </label>
           <label className="form-control"><span className="label-text text-sm">Low Stock Threshold</span>
-            <input className="input input-bordered" type="number" value={formData.lowStockThreshold} onChange={e => setFormData({...formData, lowStockThreshold: e.target.value})} placeholder="10" />
+            <input className="input input-bordered" type="number" value={formData.lowStockThreshold} onChange={e => setFormData({...formData, lowStockThreshold: e.target.value})} placeholder="10" disabled={isUploading} />
           </label>
           <label className="form-control"><span className="label-text text-sm">Shape</span>
-            <input className="input input-bordered" value={formData.shape} onChange={e => setFormData({...formData, shape: e.target.value})} placeholder="Round" />
+            <input className="input input-bordered" value={formData.shape} onChange={e => setFormData({...formData, shape: e.target.value})} placeholder="Round" disabled={isUploading} />
           </label>
           <label className="form-control"><span className="label-text text-sm">Colors (comma separated)</span>
-            <input className="input input-bordered" value={formData.colors} onChange={e => setFormData({...formData, colors: e.target.value})} placeholder="Black, Tortoise" />
+            <input className="input input-bordered" value={formData.colors} onChange={e => setFormData({...formData, colors: e.target.value})} placeholder="Black, Tortoise" disabled={isUploading} />
           </label>
+        </div>
+
+        <div className="mt-6 border-t border-base-300 pt-4">
+          <p className="font-semibold text-sm mb-2">Product Images (Max 5)</p>
+          <div className="flex flex-wrap gap-4 items-start">
+            {/* Existing Images */}
+            {existingImages.map((img) => (
+              <div key={img.publicId} className="relative w-24 h-24 rounded-xl border border-base-300 bg-base-200 overflow-hidden flex items-center justify-center">
+                <img src={img.url} alt="Product" className="w-full h-full object-cover" />
+                <button 
+                  className="btn btn-xs btn-circle btn-error absolute top-1 right-1 opacity-80 hover:opacity-100" 
+                  onClick={() => removeExistingImage(img.publicId)}
+                  disabled={isUploading}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+            
+            {/* New Image Previews */}
+            {newImages.map((file, idx) => (
+              <div key={idx} className="relative w-24 h-24 rounded-xl border border-base-300 bg-base-200 overflow-hidden flex items-center justify-center">
+                <img src={(file as any).preview} alt="Preview" className="w-full h-full object-cover" />
+                <button 
+                  className="btn btn-xs btn-circle btn-error absolute top-1 right-1 opacity-80 hover:opacity-100" 
+                  onClick={() => removeNewImage(idx)}
+                  disabled={isUploading}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+
+            {/* Upload Button */}
+            {existingImages.length + newImages.length < 5 && (
+              <label className="w-24 h-24 rounded-xl border-2 border-dashed border-base-300 hover:border-primary flex flex-col items-center justify-center cursor-pointer transition-colors bg-base-100">
+                <Plus size={24} className="text-base-content/40 mb-1" />
+                <span className="text-[10px] text-base-content/50 font-semibold uppercase tracking-wider">Add</span>
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  multiple 
+                  accept="image/jpeg, image/png, image/webp" 
+                  onChange={handleFileChange}
+                  disabled={isUploading}
+                />
+              </label>
+            )}
+          </div>
         </div>
         
         <div className="modal-action">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave}><Check size={16} /> Save Product</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={isUploading}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={isUploading}>
+            {isUploading ? <span className="loading loading-spinner loading-sm"></span> : <Check size={16} />} 
+            {isUploading ? 'Uploading & Saving...' : 'Save Product'}
+          </button>
         </div>
       </div>
-      <div className="modal-backdrop" onClick={onClose} />
+      <div className="modal-backdrop" onClick={!isUploading ? onClose : undefined} />
     </div>
   );
 };
