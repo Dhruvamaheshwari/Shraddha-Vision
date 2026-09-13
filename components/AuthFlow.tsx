@@ -138,6 +138,7 @@ const RegisterView: React.FC<{ setView: (v: AuthView) => void; toast: (msg: stri
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [terms, setTerms] = useState(false);
+  const [role, setRole] = useState<'CUSTOMER' | 'STAFF' | 'ADMIN'>('CUSTOMER');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const login = useAuthStore((state) => state.login);
@@ -160,6 +161,7 @@ const RegisterView: React.FC<{ setView: (v: AuthView) => void; toast: (msg: stri
         email: email.trim(),
         mobileNumber,
         password,
+        role,
       });
       // Auto login on success
       login(response.data.user, response.data.token);
@@ -203,6 +205,17 @@ const RegisterView: React.FC<{ setView: (v: AuthView) => void; toast: (msg: stri
             <span className="label-text font-semibold text-xs">Mobile</span>
             <input type="tel" required className="input input-bordered input-sm w-full mt-1" value={mobileNumber} onChange={e => setMobileNumber(e.target.value)} />
           </label>
+        </div>
+        <div className="form-control mt-2">
+          <span className="label-text font-semibold text-xs mb-2">Select Your Role</span>
+          <div className="flex gap-4">
+            {['CUSTOMER', 'STAFF', 'ADMIN'].map((r) => (
+              <label key={r} className="flex items-center gap-2 text-xs cursor-pointer">
+                <input type="radio" name="role" className="radio radio-primary radio-xs" checked={role === r} onChange={() => setRole(r as any)} />
+                {r.charAt(0) + r.slice(1).toLowerCase()}
+              </label>
+            ))}
+          </div>
         </div>
         <label className="form-control relative">
           <span className="label-text font-semibold text-xs">Password</span>

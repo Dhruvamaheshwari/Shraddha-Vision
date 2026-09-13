@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const User = require('../models/User');
+const { requireAuth } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ const isStrongPassword = (password) => {
 // Register new user
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, mobileNumber } = req.body;
+    const { name, email, password, mobileNumber, role = 'CUSTOMER' } = req.body;
 
     // Validation
     if (!name || !email || !password || !mobileNumber) {
@@ -36,16 +37,21 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'User already exists with this email' });
     }
 
+    if (!['CUSTOMER', 'STAFF', 'ADMIN'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid role selected.' });
+    }
+
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create user (Role is strictly USER by default based on schema)
+    // Create user
     const newUser = new User({
       name,
       email,
       password: hashedPassword,
       mobileNumber,
+      role,
     });
 
     await newUser.save();
@@ -120,6 +126,36 @@ router.post('/login', async (req, res) => {
         status: user.status,
         permissions: effectivePermissions,
       },
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   GET /api/auth/me
+// @desc    Get current logged in user
+// @access  Private
+router.get('/me', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).populate('permissionGroup');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    let effectivePermissions = [];
+    if (user.role === 'STAFF') {
+      const groupPermissions = user.permissionGroup ? user.permissionGroup.permissions : [];
+      const individualPermissions = user.permissions || [];
+      effectivePermissions = Array.from(new Set([...groupPermissions, ...individualPermissions]));
+    }
+
+    res.json({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      permissions: effectivePermissions,
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

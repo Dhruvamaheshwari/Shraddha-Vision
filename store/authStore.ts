@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import axios from 'axios';
 
 interface User {
   id: string;
@@ -16,12 +17,13 @@ interface AuthState {
   login: (userData: User, token: string) => void;
   logout: () => void;
   hasPermission: (requiredPermission: string) => boolean;
+  initialize: () => Promise<void>;
 }
 
 const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
-  token: null,
-  isAuthenticated: false,
+  token: localStorage.getItem('token') || null,
+  isAuthenticated: !!localStorage.getItem('token'),
 
   login: (userData, token) => {
     localStorage.setItem('token', token);
@@ -31,6 +33,20 @@ const useAuthStore = create<AuthState>((set, get) => ({
   logout: () => {
     localStorage.removeItem('token');
     set({ user: null, token: null, isAuthenticated: false });
+  },
+
+  initialize: async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const response = await axios.get('http://localhost:5000/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      set({ user: response.data, isAuthenticated: true, token });
+    } catch (error) {
+      localStorage.removeItem('token');
+      set({ user: null, token: null, isAuthenticated: false });
+    }
   },
 
   hasPermission: (requiredPermission) => {
