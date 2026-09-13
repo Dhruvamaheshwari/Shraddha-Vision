@@ -4,6 +4,7 @@ import useAuthStore from '../store/authStore';
 import { AlertTriangle, BarChart3, Bell, Boxes, Check, ChevronRight, Download, FileText, LayoutDashboard, Package, Pencil, Plus, Search, Settings2, ShoppingCart, Store, Users, X, Trash2 } from 'lucide-react';
 import { orders } from '../data';
 import useProductStore from '../store/productStore';
+import useOrderStore from '../store/orderStore';
 import { AdminView as AdminViewType, Order, Product } from '../types';
 
 interface AdminViewProps { view: AdminViewType; setView: (view: AdminViewType) => void; toast: (message: string, tone?: 'success' | 'info' | 'warning') => void; }
@@ -43,7 +44,7 @@ const AdminHeading: React.FC<{ eyebrow: string; title: string; action?: React.Re
 const toneClasses: Record<string, string> = { primary: 'bg-primary/15 text-primary', secondary: 'bg-secondary/15 text-secondary', accent: 'bg-accent/15 text-accent', info: 'bg-info/15 text-info', warning: 'bg-warning/15 text-warning', error: 'bg-error/15 text-error' };
 const Kpi: React.FC<{ label: string; value: string; delta: string; icon: React.ReactNode; tone?: string }> = ({ label, value, delta, icon, tone = 'primary' }) => <div className="card bg-base-100 border border-base-300"><div className="card-body p-5"><div className="flex items-start justify-between"><div><p className="text-sm text-base-content/60">{label}</p><p className="text-2xl font-black mt-1">{value}</p></div><div className={`p-2.5 rounded-xl ${toneClasses[tone] ?? toneClasses.primary}`}>{icon}</div></div><p className="text-xs text-success mt-4">↗ {delta} <span className="text-base-content/50">vs last week</span></p></div></div>;
 
-const Overview: React.FC<Pick<AdminViewProps, 'setView' | 'toast'>> = ({ setView, toast }) => { const { user } = useAuthStore(); return <><AdminHeading eyebrow="Monday, 17 June 2024" title={`Good morning, ${user?.name || 'User'}`} action={<button className="btn btn-primary" onClick={() => toast('Report exported as CSV', 'success')}><Download size={16} /> Export report</button>} /><div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3"><Kpi label="Gross sales" value="₹1,84,920" delta="18.6%" icon={<BarChart3 />} /><Kpi label="Orders" value="128" delta="12.4%" icon={<ShoppingCart />} tone="secondary" /><Kpi label="New customers" value="64" delta="8.9%" icon={<Users />} tone="accent" /><Kpi label="Avg. order value" value="₹1,445" delta="4.2%" icon={<Store />} tone="info" /></div><div className="grid xl:grid-cols-[1.45fr_1fr] gap-4 mt-4"><div className="card bg-base-100 border border-base-300"><div className="card-body"><div className="flex justify-between items-center"><div><h2 className="font-bold text-lg">Sales overview</h2><p className="text-xs text-base-content/60">Last 30 days · All channels</p></div><select className="select select-bordered select-sm"><option>Last 30 days</option><option>Last 7 days</option></select></div><div className="chart-bars mt-6">{[48, 62, 54, 74, 66, 82, 58, 76, 88, 72, 94, 80, 96, 86, 100].map((height, i) => <div className="chart-bar-wrap" key={i}><div className="chart-bar" style={{ height: `${height}%` }} /><span>{i % 3 === 0 ? `Jun ${i + 1}` : ''}</span></div>)}</div><div className="flex gap-5 text-xs text-base-content/60 mt-4"><span><i className="legend-dot bg-primary" /> Frames</span><span><i className="legend-dot bg-secondary" /> Lenses</span></div></div></div><div className="card bg-base-100 border border-base-300"><div className="card-body"><div className="flex justify-between"><div><h2 className="font-bold text-lg">Low stock alerts</h2><p className="text-xs text-base-content/60">Needs your attention</p></div><button className="btn btn-ghost btn-sm" onClick={() => setView('lens')}>View all <ChevronRight size={14} /></button></div><div className="space-y-3 mt-5"><StockAlert name="1.60 Blue-cut · Medium" level="12 units left" tone="warning" /><StockAlert name="Photochromic Brown · 1.56" level="7 units left" tone="error" /><StockAlert name="Kids Flex Temple · Small" level="9 units left" tone="warning" /></div></div></div></div><div className="card bg-base-100 border border-base-300 mt-4"><div className="card-body"><div className="flex justify-between items-center mb-3"><div><h2 className="font-bold text-lg">Recent orders</h2><p className="text-xs text-base-content/60">Live order queue</p></div><button className="btn btn-ghost btn-sm" onClick={() => setView('orders')}>All orders <ChevronRight size={14} /></button></div><OrderTable compact /></div></div></>; };
+const Overview: React.FC<Pick<AdminViewProps, 'setView' | 'toast'>> = ({ setView, toast }) => { const { user } = useAuthStore(); return <><AdminHeading eyebrow="Monday, 17 June 2024" title={`Good morning, ${user?.name || 'User'}`} action={<button className="btn btn-primary" onClick={() => toast('Report exported as CSV', 'success')}><Download size={16} /> Export report</button>} /><div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3"><Kpi label="Gross sales" value="₹1,84,920" delta="18.6%" icon={<BarChart3 />} /><Kpi label="Orders" value="128" delta="12.4%" icon={<ShoppingCart />} tone="secondary" /><Kpi label="New customers" value="64" delta="8.9%" icon={<Users />} tone="accent" /><Kpi label="Avg. order value" value="₹1,445" delta="4.2%" icon={<Store />} tone="info" /></div><div className="grid xl:grid-cols-[1.45fr_1fr] gap-4 mt-4"><div className="card bg-base-100 border border-base-300"><div className="card-body"><div className="flex justify-between items-center"><div><h2 className="font-bold text-lg">Sales overview</h2><p className="text-xs text-base-content/60">Last 30 days · All channels</p></div><select className="select select-bordered select-sm"><option>Last 30 days</option><option>Last 7 days</option></select></div><div className="chart-bars mt-6">{[48, 62, 54, 74, 66, 82, 58, 76, 88, 72, 94, 80, 96, 86, 100].map((height, i) => <div className="chart-bar-wrap" key={i}><div className="chart-bar" style={{ height: `${height}%` }} /><span>{i % 3 === 0 ? `Jun ${i + 1}` : ''}</span></div>)}</div><div className="flex gap-5 text-xs text-base-content/60 mt-4"><span><i className="legend-dot bg-primary" /> Frames</span><span><i className="legend-dot bg-secondary" /> Lenses</span></div></div></div><div className="card bg-base-100 border border-base-300"><div className="card-body"><div className="flex justify-between"><div><h2 className="font-bold text-lg">Low stock alerts</h2><p className="text-xs text-base-content/60">Needs your attention</p></div><button className="btn btn-ghost btn-sm" onClick={() => setView('lens')}>View all <ChevronRight size={14} /></button></div><div className="space-y-3 mt-5"><StockAlert name="1.60 Blue-cut · Medium" level="12 units left" tone="warning" /><StockAlert name="Photochromic Brown · 1.56" level="7 units left" tone="error" /><StockAlert name="Kids Flex Temple · Small" level="9 units left" tone="warning" /></div></div></div></div><div className="card bg-base-100 border border-base-300 mt-4"><div className="card-body"><div className="flex justify-between items-center mb-3"><div><h2 className="font-bold text-lg">Recent orders</h2><p className="text-xs text-base-content/60">Live order queue</p></div><button className="btn btn-ghost btn-sm" onClick={() => setView('orders')}>All orders <ChevronRight size={14} /></button></div><OrderTable compact onSelect={() => setView('orders')} /></div></div></>; };
 const StockAlert: React.FC<{ name: string; level: string; tone: string }> = ({ name, level, tone }) => <div className="flex items-center gap-3"><div className={`p-2 rounded-lg ${toneClasses[tone] ?? toneClasses.warning}`}><AlertTriangle size={16} /></div><div className="flex-1"><p className="text-sm font-medium">{name}</p><p className="text-xs text-base-content/60">{level}</p></div><button className="btn btn-outline btn-xs">Reorder</button></div>;
 
 const ProductsAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
@@ -300,9 +301,275 @@ const AddProduct: React.FC<{ product?: Product | null; onClose: () => void; toas
   );
 };
 
-const OrdersAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => <><AdminHeading eyebrow="Fulfilment" title="Orders" action={<button className="btn btn-outline" onClick={() => toast('Order list exported', 'success')}><Download size={16} /> Export</button>} /><div className="stats stats-vertical sm:stats-horizontal shadow bg-base-100 w-full mb-5"><div className="stat"><div className="stat-title">To fulfil</div><div className="stat-value text-primary">24</div><div className="stat-desc">8 due today</div></div><div className="stat"><div className="stat-title">Ready to ship</div><div className="stat-value">18</div><div className="stat-desc">Across 3 hubs</div></div><div className="stat"><div className="stat-title">Returns pending</div><div className="stat-value">3</div><div className="stat-desc">Review today</div></div></div><div className="card bg-base-100 border border-base-300"><div className="card-body p-4"><div className="tabs tabs-bordered"><button className="tab tab-active">All orders (128)</button><button className="tab">Processing (24)</button><button className="tab">Ready (18)</button><button className="tab">Returns (3)</button></div><OrderTable toast={toast} /></div></div></>;
-const statusClass = (status: Order['status']) => status === 'Delivered' ? 'badge-success' : status === 'Processing' ? 'badge-info' : status === 'Packed' ? 'badge-warning' : 'badge-secondary';
-const OrderTable: React.FC<{ compact?: boolean; toast?: AdminViewProps['toast'] }> = ({ compact, toast }) => <div className="overflow-x-auto"><table className="table"><thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Amount</th><th>Status</th><th /></tr></thead><tbody>{orders.slice(0, compact ? 4 : undefined).map((order) => <tr key={order.id}><td className="font-semibold">{order.id}<p className="font-normal text-xs text-base-content/50">{order.items} item{order.items > 1 ? 's' : ''}</p></td><td>{order.customer}</td><td className="text-sm text-base-content/60">{order.date}</td><td>₹{order.amount.toLocaleString('en-IN')}</td><td><button className={`badge ${statusClass(order.status)} badge-sm`} onClick={() => toast?.(`${order.id} marked as ${order.status === 'Delivered' ? 'Processing' : 'Delivered'}`, 'success')}>{order.status}</button></td><td><button className="btn btn-ghost btn-xs" onClick={() => toast?.(`Opened order ${order.id}`, 'info')}><ChevronRight size={15} /></button></td></tr>)}</tbody></table></div>;
+const OrdersAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
+  const { orders: storeOrders, counts, fetchOrders } = useOrderStore();
+  const [activeTab, setActiveTab] = useState('All orders');
+  const [search, setSearch] = useState('');
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let statusTab = undefined;
+    if (activeTab === 'Processing') statusTab = 'Processing';
+    if (activeTab === 'Ready') statusTab = 'Ready';
+    if (activeTab === 'Returns') statusTab = 'Returns';
+    
+    const delay = setTimeout(() => {
+      fetchOrders({ search, tab: statusTab, limit: 50 });
+    }, 300);
+    return () => clearTimeout(delay);
+  }, [activeTab, search, fetchOrders]);
+
+  const tabs = [
+    { label: 'All orders', value: counts.all },
+    { label: 'Processing', value: counts.toFulfil },
+    { label: 'Ready', value: counts.ready },
+    { label: 'Returns', value: counts.returns }
+  ];
+
+  return (
+    <>
+      <AdminHeading eyebrow="Fulfilment" title="Orders" action={<button className="btn btn-outline" onClick={() => toast('Order list exported', 'success')}><Download size={16} /> Export</button>} />
+      <div className="stats stats-vertical sm:stats-horizontal shadow bg-base-100 w-full mb-5">
+        <div className="stat"><div className="stat-title">To fulfil</div><div className="stat-value text-primary">{counts.toFulfil}</div><div className="stat-desc">Processing required</div></div>
+        <div className="stat"><div className="stat-title">Ready to ship</div><div className="stat-value">{counts.ready}</div><div className="stat-desc">Packed & ready</div></div>
+        <div className="stat"><div className="stat-title">Returns pending</div><div className="stat-value">{counts.returns}</div><div className="stat-desc">Review needed</div></div>
+      </div>
+      <div className="card bg-base-100 border border-base-300">
+        <div className="card-body p-4">
+          <div className="flex flex-wrap gap-4 justify-between items-center mb-4">
+            <div className="tabs tabs-bordered">
+              {tabs.map(t => <button key={t.label} className={`tab ${activeTab === t.label ? 'tab-active font-semibold' : ''}`} onClick={() => setActiveTab(t.label)}>{t.label} ({t.value})</button>)}
+            </div>
+            <label className="input input-bordered input-sm flex items-center gap-2 max-w-xs w-full">
+              <Search size={15} className="opacity-60" />
+              <input className="grow" placeholder="Search orders..." value={search} onChange={e => setSearch(e.target.value)} />
+            </label>
+          </div>
+          <OrderTable toast={toast} orders={storeOrders} onSelect={setSelectedOrderId} />
+        </div>
+      </div>
+      {selectedOrderId && <OrderDetailsModal orderId={selectedOrderId} onClose={() => setSelectedOrderId(null)} toast={toast} />}
+    </>
+  );
+};
+const statusClass = (status: string) => 
+  ['DELIVERED'].includes(status) ? 'badge-success' : 
+  ['PROCESSING'].includes(status) ? 'badge-info' : 
+  ['PACKED', 'READY_FOR_PICKUP'].includes(status) ? 'badge-warning' : 
+  ['RETURN_REQUESTED', 'RETURN_APPROVED', 'REFUND_PENDING'].includes(status) ? 'badge-error' :
+  'badge-secondary';
+
+const OrderTable: React.FC<{ compact?: boolean; toast?: AdminViewProps['toast']; orders?: any[]; onSelect?: (id: string) => void }> = ({ compact, toast, orders = [], onSelect }) => {
+  const { updateOrderStatus, fetchOrders } = useOrderStore();
+  const { hasPermission, user } = useAuthStore();
+  const canUpdate = user?.role === 'ADMIN' || hasPermission('orders.update_status');
+  
+  const displayOrders = compact ? orders.slice(0, 4) : orders;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Customer</th>
+            <th>Date</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {displayOrders.map((order) => {
+            const itemCount = order.items?.length || 0;
+            return (
+              <tr key={order._id}>
+                <td className="font-semibold">
+                  {order.orderNumber}
+                  <p className="font-normal text-xs text-base-content/50">
+                    {itemCount} item{itemCount > 1 ? 's' : ''}
+                  </p>
+                </td>
+                <td>{order.customerName}</td>
+                <td className="text-sm text-base-content/60">{new Date(order.createdAt).toLocaleDateString()}</td>
+                <td>₹{(order.totalAmount || 0).toLocaleString('en-IN')}</td>
+                <td>
+                  {canUpdate ? (
+                    <select 
+                      className={`select select-xs select-bordered bg-transparent ${statusClass(order.orderStatus)}`}
+                      value={order.orderStatus}
+                      onChange={async (e) => {
+                        const newStatus = e.target.value;
+                        if (window.confirm(`Change status to ${newStatus}?`)) {
+                          try {
+                            await updateOrderStatus(order._id, newStatus);
+                            toast?.(`Status updated to ${newStatus}`, 'success');
+                            fetchOrders();
+                          } catch (err: any) {
+                            toast?.(err.response?.data?.message || 'Failed to update', 'error');
+                          }
+                        }
+                      }}
+                    >
+                      <option value="PENDING">Pending</option>
+                      <option value="PROCESSING">Processing</option>
+                      <option value="PACKED">Packed</option>
+                      <option value="READY_FOR_PICKUP">Ready for pickup</option>
+                      <option value="SHIPPED">Shipped</option>
+                      <option value="DELIVERED">Delivered</option>
+                      <option value="CANCELLED">Cancelled</option>
+                      <option value="RETURN_REQUESTED">Return Requested</option>
+                    </select>
+                  ) : (
+                    <span className={`badge ${statusClass(order.orderStatus)} badge-sm`}>{order.orderStatus}</span>
+                  )}
+                </td>
+                <td>
+                  <button className="btn btn-ghost btn-xs" onClick={() => onSelect?.(order._id)}>
+                    <ChevronRight size={15} />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+          {displayOrders.length === 0 && (
+            <tr>
+              <td colSpan={6} className="text-center py-6 text-base-content/50">No orders found.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const OrderDetailsModal: React.FC<{ orderId: string; onClose: () => void; toast: AdminViewProps['toast'] }> = ({ orderId, onClose, toast }) => {
+  const { activeOrder, fetchOrder, isLoading, updateOrderStatus, fetchOrders } = useOrderStore();
+  const { hasPermission, user } = useAuthStore();
+  
+  useEffect(() => {
+    fetchOrder(orderId);
+  }, [orderId, fetchOrder]);
+
+  if (isLoading || !activeOrder || activeOrder._id !== orderId) {
+    return <div className="modal modal-open"><div className="modal-box text-center py-10"><span className="loading loading-spinner loading-md"></span></div></div>;
+  }
+
+  const canUpdate = user?.role === 'ADMIN' || hasPermission('orders.update_status');
+
+  return (
+    <div className="modal modal-open">
+      <div className="modal-box max-w-3xl max-h-[90vh] overflow-y-auto">
+        <button className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3" onClick={onClose}><X size={16} /></button>
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="font-black text-2xl">Order {activeOrder.orderNumber}</h3>
+            <p className="text-sm text-base-content/60 mt-1">{new Date(activeOrder.createdAt).toLocaleString()}</p>
+          </div>
+          {canUpdate ? (
+            <select 
+              className={`select select-sm select-bordered ${statusClass(activeOrder.orderStatus)} mr-6`}
+              value={activeOrder.orderStatus}
+              onChange={async (e) => {
+                const newStatus = e.target.value;
+                if (window.confirm(`Change status to ${newStatus}?`)) {
+                  try {
+                    await updateOrderStatus(activeOrder._id, newStatus);
+                    toast?.(`Status updated to ${newStatus}`, 'success');
+                    fetchOrders();
+                  } catch (err: any) {
+                    toast?.(err.response?.data?.message || 'Failed to update', 'error');
+                  }
+                }
+              }}
+            >
+              <option value="PENDING">Pending</option>
+              <option value="PROCESSING">Processing</option>
+              <option value="PACKED">Packed</option>
+              <option value="READY_FOR_PICKUP">Ready for pickup</option>
+              <option value="SHIPPED">Shipped</option>
+              <option value="DELIVERED">Delivered</option>
+              <option value="CANCELLED">Cancelled</option>
+              <option value="RETURN_REQUESTED">Return Requested</option>
+            </select>
+          ) : (
+            <span className={`badge ${statusClass(activeOrder.orderStatus)} mr-6 mt-1`}>{activeOrder.orderStatus}</span>
+          )}
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6 mt-6 border-b border-base-300 pb-6">
+          <div>
+            <p className="font-bold text-sm uppercase tracking-wider text-base-content/60 mb-2">Customer</p>
+            <p className="font-semibold">{activeOrder.customer?.name || activeOrder.customerName}</p>
+            <p className="text-sm text-base-content/80 mt-1">{activeOrder.customer?.email || activeOrder.customerEmail}</p>
+            <p className="text-sm text-base-content/80">{activeOrder.customer?.mobile || activeOrder.customerMobile}</p>
+          </div>
+          <div>
+            <p className="font-bold text-sm uppercase tracking-wider text-base-content/60 mb-2">Delivery Address</p>
+            <p className="font-semibold">{activeOrder.shippingAddress?.name || activeOrder.customerName}</p>
+            <p className="text-sm text-base-content/80 mt-1">{activeOrder.shippingAddress?.street}</p>
+            <p className="text-sm text-base-content/80">{activeOrder.shippingAddress?.city}, {activeOrder.shippingAddress?.state} {activeOrder.shippingAddress?.zipCode}</p>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <p className="font-bold text-sm uppercase tracking-wider text-base-content/60 mb-4">Ordered Items</p>
+          <div className="space-y-4">
+            {activeOrder.items.map((item, idx) => (
+              <div key={idx} className="flex gap-4 items-center">
+                <div className="w-16 h-12 bg-base-200 rounded-lg flex items-center justify-center relative overflow-hidden">
+                  <div className="scale-[.4] origin-top-left absolute left-2 top-2"><ProductMini product={{ id: '', name: '', brand: '', price: 0, tag: '', lens: [], mrp: 0, shape: '', size: '', code: '', category: '', stock: 0, status: 'INACTIVE', colors: [] }} /></div>
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-sm">{item.productName}</p>
+                  <p className="text-xs text-base-content/60">ID: {item.productNumber}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-sm">₹{item.price.toLocaleString('en-IN')}</p>
+                  <p className="text-xs text-base-content/60">Qty: {item.quantity}</p>
+                </div>
+                <div className="text-right w-24">
+                  <p className="font-bold">₹{item.total.toLocaleString('en-IN')}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-6 border-t border-base-300 pt-4">
+          <div className="w-64 space-y-2 text-sm">
+            <div className="flex justify-between"><span>Subtotal</span><span>₹{(activeOrder.subtotal || 0).toLocaleString('en-IN')}</span></div>
+            {activeOrder.discount > 0 && <div className="flex justify-between text-success"><span>Welcome saving</span><span>-₹{activeOrder.discount.toLocaleString('en-IN')}</span></div>}
+            <div className="flex justify-between"><span>Tax</span><span>₹{(activeOrder.tax || 0).toLocaleString('en-IN')}</span></div>
+            <div className="flex justify-between"><span>Shipping</span><span>₹{(activeOrder.shipping || 0).toLocaleString('en-IN')}</span></div>
+            <div className="flex justify-between font-black text-lg border-t border-base-300 pt-2"><span>Total</span><span>₹{(activeOrder.totalAmount || 0).toLocaleString('en-IN')}</span></div>
+            <div className="flex justify-between pt-1"><span className="text-base-content/60">Payment</span><span className="badge badge-sm badge-success">{activeOrder.paymentStatus}</span></div>
+          </div>
+        </div>
+
+        <div className="mt-8 bg-base-200 rounded-xl p-5">
+          <p className="font-bold text-sm uppercase tracking-wider text-base-content/60 mb-4">Timeline</p>
+          <ul className="steps steps-vertical w-full">
+            {activeOrder.timeline?.map((evt: any, i: number) => (
+              <li key={i} className="step step-primary text-sm text-left w-full justify-start">
+                <div className="ml-2 py-1">
+                  <span className="font-semibold block">{evt.status}</span>
+                  <span className="text-xs text-base-content/60">{new Date(evt.timestamp || activeOrder.createdAt).toLocaleString()}</span>
+                </div>
+              </li>
+            ))}
+            {!['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(activeOrder.orderStatus) && (
+              <li className="step text-sm text-left w-full justify-start opacity-40">
+                <div className="ml-2 py-1"><span className="font-semibold block">Expected Delivery</span></div>
+              </li>
+            )}
+          </ul>
+        </div>
+      </div>
+      <div className="modal-backdrop" onClick={onClose}></div>
+    </div>
+  );
+};
 
 const CustomersAdmin: React.FC = () => <><AdminHeading eyebrow="Relationships" title="Customers" action={<label className="input input-bordered flex items-center gap-2 input-sm w-64"><Search size={15} className="opacity-60" /><input className="grow" placeholder="Search customers…" /></label>} /><div className="grid md:grid-cols-3 gap-3 mb-5"><Kpi label="Total customers" value="8,642" delta="10.1%" icon={<Users />} /><Kpi label="Repeat rate" value="42.8%" delta="3.4%" icon={<ShoppingCart />} tone="secondary" /><Kpi label="Prescriptions saved" value="2,108" delta="14.6%" icon={<FileText />} tone="info" /></div><div className="card bg-base-100 border border-base-300"><div className="card-body p-4"><h2 className="font-bold">Recent customer activity</h2><div className="overflow-x-auto mt-3"><table className="table"><thead><tr><th>Customer</th><th>Last order</th><th>Lifetime value</th><th>Preference</th><th /></tr></thead><tbody>{[['Ananya Rao', 'NYN-2408 · Today', '₹12,480', 'Round · Nayan House'], ['Ritesh Menon', 'NYN-2407 · Yesterday', '₹8,920', 'Rectangle · Blue-cut'], ['Kavya Shah', 'NYN-2406 · 12 Jun', '₹22,410', 'Cat-eye · The Edit'], ['Arjun Mehta', 'NYN-2405 · 11 Jun', '₹4,890', 'Aviator · Suncraft'], ['Sanya Iyer', 'NYN-2404 · 10 Jun', '₹18,200', 'Geometric · Transitions']].map((row) => <tr key={row[0]}><td className="font-semibold">{row[0]}</td><td className="text-sm">{row[1]}</td><td>{row[2]}</td><td className="text-sm text-base-content/60">{row[3]}</td><td><button className="btn btn-ghost btn-xs"><ChevronRight size={15} /></button></td></tr>)}</tbody></table></div></div></div></>;
 

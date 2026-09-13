@@ -6,6 +6,7 @@ require('dotenv').config();
 const authRoutes = require('./routes/authRoutes');
 const staffRoutes = require('./routes/staffRoutes');
 const frameRoutes = require('./routes/frameRoutes');
+const orderRoutes = require('./routes/orderRoutes');
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/frames', frameRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Error Handling Middleware
 app.use((err, req, res, next) => {
