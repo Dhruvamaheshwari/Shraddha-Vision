@@ -15,6 +15,8 @@ export interface Product {
   size: string;
   colors: string[];
   stock: number;
+  lowStockThreshold?: number;
+  status?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK' | 'INACTIVE';
   category: string;
   lens: string[];
   tag?: string;

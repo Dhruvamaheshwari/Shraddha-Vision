@@ -1,8 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import axios from 'axios';
 import useAuthStore from '../store/authStore';
-import { AlertTriangle, BarChart3, Bell, Boxes, Check, ChevronRight, Download, FileText, LayoutDashboard, Package, Pencil, Plus, Search, Settings2, ShoppingCart, Store, Users, X } from 'lucide-react';
-import { orders, products } from '../data';
+import { AlertTriangle, BarChart3, Bell, Boxes, Check, ChevronRight, Download, FileText, LayoutDashboard, Package, Pencil, Plus, Search, Settings2, ShoppingCart, Store, Users, X, Trash2 } from 'lucide-react';
+import { orders } from '../data';
+import useProductStore from '../store/productStore';
 import { AdminView as AdminViewType, Order, Product } from '../types';
 
 interface AdminViewProps { view: AdminViewType; setView: (view: AdminViewType) => void; toast: (message: string, tone?: 'success' | 'info' | 'warning') => void; }
@@ -45,9 +46,259 @@ const Kpi: React.FC<{ label: string; value: string; delta: string; icon: React.R
 const Overview: React.FC<Pick<AdminViewProps, 'setView' | 'toast'>> = ({ setView, toast }) => { const { user } = useAuthStore(); return <><AdminHeading eyebrow="Monday, 17 June 2024" title={`Good morning, ${user?.name || 'User'}`} action={<button className="btn btn-primary" onClick={() => toast('Report exported as CSV', 'success')}><Download size={16} /> Export report</button>} /><div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3"><Kpi label="Gross sales" value="₹1,84,920" delta="18.6%" icon={<BarChart3 />} /><Kpi label="Orders" value="128" delta="12.4%" icon={<ShoppingCart />} tone="secondary" /><Kpi label="New customers" value="64" delta="8.9%" icon={<Users />} tone="accent" /><Kpi label="Avg. order value" value="₹1,445" delta="4.2%" icon={<Store />} tone="info" /></div><div className="grid xl:grid-cols-[1.45fr_1fr] gap-4 mt-4"><div className="card bg-base-100 border border-base-300"><div className="card-body"><div className="flex justify-between items-center"><div><h2 className="font-bold text-lg">Sales overview</h2><p className="text-xs text-base-content/60">Last 30 days · All channels</p></div><select className="select select-bordered select-sm"><option>Last 30 days</option><option>Last 7 days</option></select></div><div className="chart-bars mt-6">{[48, 62, 54, 74, 66, 82, 58, 76, 88, 72, 94, 80, 96, 86, 100].map((height, i) => <div className="chart-bar-wrap" key={i}><div className="chart-bar" style={{ height: `${height}%` }} /><span>{i % 3 === 0 ? `Jun ${i + 1}` : ''}</span></div>)}</div><div className="flex gap-5 text-xs text-base-content/60 mt-4"><span><i className="legend-dot bg-primary" /> Frames</span><span><i className="legend-dot bg-secondary" /> Lenses</span></div></div></div><div className="card bg-base-100 border border-base-300"><div className="card-body"><div className="flex justify-between"><div><h2 className="font-bold text-lg">Low stock alerts</h2><p className="text-xs text-base-content/60">Needs your attention</p></div><button className="btn btn-ghost btn-sm" onClick={() => setView('lens')}>View all <ChevronRight size={14} /></button></div><div className="space-y-3 mt-5"><StockAlert name="1.60 Blue-cut · Medium" level="12 units left" tone="warning" /><StockAlert name="Photochromic Brown · 1.56" level="7 units left" tone="error" /><StockAlert name="Kids Flex Temple · Small" level="9 units left" tone="warning" /></div></div></div></div><div className="card bg-base-100 border border-base-300 mt-4"><div className="card-body"><div className="flex justify-between items-center mb-3"><div><h2 className="font-bold text-lg">Recent orders</h2><p className="text-xs text-base-content/60">Live order queue</p></div><button className="btn btn-ghost btn-sm" onClick={() => setView('orders')}>All orders <ChevronRight size={14} /></button></div><OrderTable compact /></div></div></>; };
 const StockAlert: React.FC<{ name: string; level: string; tone: string }> = ({ name, level, tone }) => <div className="flex items-center gap-3"><div className={`p-2 rounded-lg ${toneClasses[tone] ?? toneClasses.warning}`}><AlertTriangle size={16} /></div><div className="flex-1"><p className="text-sm font-medium">{name}</p><p className="text-xs text-base-content/60">{level}</p></div><button className="btn btn-outline btn-xs">Reorder</button></div>;
 
-const ProductsAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => { const [search, setSearch] = useState(''); const [showAdd, setShowAdd] = useState(false); const filtered = products.filter((p) => `${p.name} ${p.code} ${p.brand}`.toLowerCase().includes(search.toLowerCase())); return <><AdminHeading eyebrow="Catalog" title="Products" action={<button className="btn btn-primary" onClick={() => setShowAdd(true)}><Plus size={17} /> Add product</button>} /><div className="card bg-base-100 border border-base-300"><div className="card-body p-4"><div className="flex flex-wrap gap-2 justify-between"><label className="input input-bordered input-sm flex items-center gap-2 w-72"><Search size={15} className="opacity-60" /><input className="grow" placeholder="Search products…" value={search} onChange={(e) => setSearch(e.target.value)} /></label><div className="flex gap-2"><select className="select select-bordered select-sm"><option>All categories</option><option>Eyeglasses</option><option>Sunglasses</option></select><button className="btn btn-ghost btn-sm"><Download size={15} /> Export</button></div></div><div className="overflow-x-auto mt-4"><table className="table"><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th /></tr></thead><tbody>{filtered.map((p) => <tr key={p.id}><td><div className="flex items-center gap-3"><div className="w-12 h-10 rounded-lg bg-base-200"><div className="scale-[.55] origin-top-left"><ProductMini product={p} /></div></div><div><p className="font-semibold text-sm">{p.name}</p><p className="text-xs text-base-content/50">{p.code} · {p.brand}</p></div></div></td><td className="text-sm">{p.category}</td><td className="font-semibold">₹{p.price.toLocaleString('en-IN')}</td><td>{p.stock}</td><td><span className={`badge badge-sm ${p.stock < 8 ? 'badge-warning' : 'badge-success'}`}>{p.stock < 8 ? 'Low stock' : 'In stock'}</span></td><td><button className="btn btn-ghost btn-xs" onClick={() => toast(`Editing ${p.name}`, 'info')}><Pencil size={14} /></button></td></tr>)}</tbody></table></div></div></div>{showAdd && <AddProduct onClose={() => setShowAdd(false)} onSave={() => { setShowAdd(false); toast('Product draft added to catalog', 'success'); }} />}</> };
+const ProductsAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
+  const { frames, fetchFrames, deleteFrame } = useProductStore();
+  const { hasPermission } = useAuthStore();
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('All categories');
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  useEffect(() => {
+    const delay = setTimeout(() => {
+      fetchFrames({ search, category, limit: 50, includeInactive: true });
+    }, 300);
+    return () => clearTimeout(delay);
+  }, [search, category, fetchFrames]);
+
+  const canCreate = hasPermission('products.create');
+  const canEdit = hasPermission('products.edit');
+  const canDelete = hasPermission('products.delete');
+
+  return (
+    <>
+      <AdminHeading 
+        eyebrow="Catalog" 
+        title="Products" 
+        action={
+          canCreate ? (
+            <button className="btn btn-primary" onClick={() => setShowAdd(true)}>
+              <Plus size={17} /> Add product
+            </button>
+          ) : null
+        } 
+      />
+      <div className="card bg-base-100 border border-base-300">
+        <div className="card-body p-4">
+          <div className="flex flex-wrap gap-2 justify-between">
+            <label className="input input-bordered input-sm flex items-center gap-2 w-72">
+              <Search size={15} className="opacity-60" />
+              <input 
+                className="grow" 
+                placeholder="Search products…" 
+                value={search} 
+                onChange={(e) => setSearch(e.target.value)} 
+              />
+            </label>
+            <div className="flex gap-2">
+              <select 
+                className="select select-bordered select-sm"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option>All categories</option>
+                <option>Eyeglasses</option>
+                <option>Sunglasses</option>
+                <option>Blue-light</option>
+                <option>Kids</option>
+                <option>Premium</option>
+              </select>
+              <button className="btn btn-ghost btn-sm" onClick={() => toast('Exporting products as CSV...', 'info')}>
+                <Download size={15} /> Export
+              </button>
+            </div>
+          </div>
+          <div className="overflow-x-auto mt-4">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Category</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Status</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {frames.map((p) => (
+                  <tr key={p.id} className={p.status === 'INACTIVE' ? 'opacity-50' : ''}>
+                    <td>
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-10 rounded-lg bg-base-200">
+                          <div className="scale-[.55] origin-top-left">
+                            <ProductMini product={p} />
+                          </div>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm">{p.name}</p>
+                          <p className="text-xs text-base-content/50">{p.code || p.id} · {p.brand}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="text-sm">{p.category}</td>
+                    <td className="font-semibold">₹{p.price.toLocaleString('en-IN')}</td>
+                    <td>{p.stock}</td>
+                    <td>
+                      <span className={`badge badge-sm ${
+                        p.status === 'OUT_OF_STOCK' ? 'badge-error' 
+                        : p.status === 'LOW_STOCK' ? 'badge-warning' 
+                        : p.status === 'INACTIVE' ? 'badge-ghost' 
+                        : 'badge-success'
+                      }`}>
+                        {p.status === 'OUT_OF_STOCK' ? 'Out of stock' 
+                         : p.status === 'LOW_STOCK' ? 'Low stock' 
+                         : p.status === 'INACTIVE' ? 'Inactive' 
+                         : 'In stock'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="flex gap-1">
+                        {canEdit && (
+                          <button className="btn btn-ghost btn-xs" onClick={() => setEditingProduct(p)} title="Edit">
+                            <Pencil size={14} />
+                          </button>
+                        )}
+                        {canDelete && p.status !== 'INACTIVE' && (
+                          <button className="btn btn-ghost btn-xs text-error hover:bg-error hover:text-error-content" onClick={async () => {
+                            if (window.confirm(`Are you sure you want to deactivate ${p.name}?`)) {
+                              await deleteFrame(p.id);
+                              toast(`${p.name} deactivated`, 'success');
+                            }
+                          }} title="Deactivate">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {frames.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="text-center py-8 text-base-content/60">
+                      No products found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      {(showAdd || editingProduct) && (
+        <AddProduct 
+          product={editingProduct}
+          onClose={() => { setShowAdd(false); setEditingProduct(null); }} 
+          toast={toast}
+        />
+      )}
+    </>
+  );
+};
 const ProductMini: React.FC<{ product: Product }> = ({ product }) => <div className="frame-visual frame-visual-compact"><span className="lens left" /><span className="bridge" /><span className="lens right" /></div>;
-const AddProduct: React.FC<{ onClose: () => void; onSave: () => void }> = ({ onClose, onSave }) => <div className="modal modal-open"><div className="modal-box max-w-2xl"><button className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3" onClick={onClose}><X size={16} /></button><h3 className="font-bold text-xl">Add product</h3><p className="text-sm text-base-content/60 mt-1">Create a catalog draft for your next frame.</p><div className="grid sm:grid-cols-2 gap-3 mt-6"><label className="form-control"><span className="label-text text-sm">Product name</span><input className="input input-bordered" placeholder="e.g. Anika Soft Square" /></label><label className="form-control"><span className="label-text text-sm">Product code</span><input className="input input-bordered" placeholder="NO-111" /></label><label className="form-control"><span className="label-text text-sm">Brand</span><select className="select select-bordered"><option>Nayan House</option><option>The Edit</option><option>Suncraft</option></select></label><label className="form-control"><span className="label-text text-sm">Price (₹)</span><input className="input input-bordered" type="number" placeholder="1999" /></label></div><div className="modal-action"><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={onSave}><Check size={16} /> Save draft</button></div></div><div className="modal-backdrop" onClick={onClose} /></div>;
+const AddProduct: React.FC<{ product?: Product | null; onClose: () => void; toast: (m: string, t?: 'success'|'error') => void }> = ({ product, onClose, toast }) => {
+  const { createFrame, updateFrame } = useProductStore();
+  const [formData, setFormData] = useState({
+    name: product?.name || '',
+    code: product?.code || product?.id || '',
+    brand: product?.brand || 'Nayan House',
+    category: product?.category || 'Eyeglasses',
+    price: product?.price || '',
+    mrp: product?.mrp || '',
+    stock: product?.stock || 0,
+    lowStockThreshold: product?.lowStockThreshold || 10,
+    shape: product?.shape || 'Round',
+    size: product?.size || 'Medium',
+    colors: product?.colors?.join(', ') || '',
+    lens: product?.lens?.join(', ') || '',
+  });
+
+  const handleSave = async () => {
+    if (!formData.name || !formData.code || !formData.price || !formData.category) {
+      toast('Name, Code, Category, and Price are required', 'error');
+      return;
+    }
+    
+    const payload = {
+      ...formData,
+      id: formData.code.toLowerCase(), // mapping code to 'id' for backend
+      price: Number(formData.price),
+      mrp: Number(formData.mrp) || Number(formData.price),
+      stock: Number(formData.stock),
+      lowStockThreshold: Number(formData.lowStockThreshold),
+      colors: formData.colors.split(',').map(s => s.trim()).filter(Boolean),
+      lens: formData.lens.split(',').map(s => s.trim()).filter(Boolean),
+    };
+
+    try {
+      if (product) {
+        await updateFrame(product.id, payload);
+        toast('Product updated successfully', 'success');
+      } else {
+        await createFrame(payload);
+        toast('Product added successfully', 'success');
+      }
+      onClose();
+    } catch (err: any) {
+      toast(err.response?.data?.message || 'Failed to save product', 'error');
+    }
+  };
+
+  return (
+    <div className="modal modal-open">
+      <div className="modal-box max-w-2xl">
+        <button className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3" onClick={onClose}><X size={16} /></button>
+        <h3 className="font-bold text-xl">{product ? 'Edit product' : 'Add product'}</h3>
+        <p className="text-sm text-base-content/60 mt-1">Manage product catalog details.</p>
+        
+        <div className="grid sm:grid-cols-2 gap-3 mt-6">
+          <label className="form-control"><span className="label-text text-sm">Product name *</span>
+            <input className="input input-bordered" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Anika Soft Square" />
+          </label>
+          <label className="form-control"><span className="label-text text-sm">Product code *</span>
+            <input className="input input-bordered" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value})} placeholder="NO-111" disabled={!!product} />
+          </label>
+          <label className="form-control"><span className="label-text text-sm">Brand</span>
+            <input className="input input-bordered" value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} placeholder="Nayan House" />
+          </label>
+          <label className="form-control"><span className="label-text text-sm">Category *</span>
+            <select className="select select-bordered" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
+              <option>Eyeglasses</option>
+              <option>Sunglasses</option>
+              <option>Blue-light</option>
+              <option>Kids</option>
+              <option>Premium</option>
+            </select>
+          </label>
+          <label className="form-control"><span className="label-text text-sm">Price (₹) *</span>
+            <input className="input input-bordered" type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} placeholder="1999" />
+          </label>
+          <label className="form-control"><span className="label-text text-sm">MRP (₹)</span>
+            <input className="input input-bordered" type="number" value={formData.mrp} onChange={e => setFormData({...formData, mrp: e.target.value})} placeholder="2499" />
+          </label>
+          <label className="form-control"><span className="label-text text-sm">Stock Quantity</span>
+            <input className="input input-bordered" type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} placeholder="0" />
+          </label>
+          <label className="form-control"><span className="label-text text-sm">Low Stock Threshold</span>
+            <input className="input input-bordered" type="number" value={formData.lowStockThreshold} onChange={e => setFormData({...formData, lowStockThreshold: e.target.value})} placeholder="10" />
+          </label>
+          <label className="form-control"><span className="label-text text-sm">Shape</span>
+            <input className="input input-bordered" value={formData.shape} onChange={e => setFormData({...formData, shape: e.target.value})} placeholder="Round" />
+          </label>
+          <label className="form-control"><span className="label-text text-sm">Colors (comma separated)</span>
+            <input className="input input-bordered" value={formData.colors} onChange={e => setFormData({...formData, colors: e.target.value})} placeholder="Black, Tortoise" />
+          </label>
+        </div>
+        
+        <div className="modal-action">
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleSave}><Check size={16} /> Save Product</button>
+        </div>
+      </div>
+      <div className="modal-backdrop" onClick={onClose} />
+    </div>
+  );
+};
 
 const OrdersAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => <><AdminHeading eyebrow="Fulfilment" title="Orders" action={<button className="btn btn-outline" onClick={() => toast('Order list exported', 'success')}><Download size={16} /> Export</button>} /><div className="stats stats-vertical sm:stats-horizontal shadow bg-base-100 w-full mb-5"><div className="stat"><div className="stat-title">To fulfil</div><div className="stat-value text-primary">24</div><div className="stat-desc">8 due today</div></div><div className="stat"><div className="stat-title">Ready to ship</div><div className="stat-value">18</div><div className="stat-desc">Across 3 hubs</div></div><div className="stat"><div className="stat-title">Returns pending</div><div className="stat-value">3</div><div className="stat-desc">Review today</div></div></div><div className="card bg-base-100 border border-base-300"><div className="card-body p-4"><div className="tabs tabs-bordered"><button className="tab tab-active">All orders (128)</button><button className="tab">Processing (24)</button><button className="tab">Ready (18)</button><button className="tab">Returns (3)</button></div><OrderTable toast={toast} /></div></div></>;
 const statusClass = (status: Order['status']) => status === 'Delivered' ? 'badge-success' : status === 'Processing' ? 'badge-info' : status === 'Packed' ? 'badge-warning' : 'badge-secondary';
