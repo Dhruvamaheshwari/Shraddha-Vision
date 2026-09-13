@@ -27,6 +27,19 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    status: {
+      type: String,
+      enum: ['ACTIVE', 'INACTIVE', 'SUSPENDED'],
+      default: 'ACTIVE',
+    },
+    permissionGroup: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'PermissionGroup',
+      default: null,
+    },
+    permissions: [{
+      type: String,
+    }],
   },
   {
     timestamps: true,

@@ -1,7 +1,7 @@
 export type Mode = 'customer' | 'admin';
 export type CustomerView = 'home' | 'shop' | 'appointments' | 'stores';
 export type AdminView = 'overview' | 'products' | 'orders' | 'customers' | 'lens' | 'analytics' | 'suppliers' | 'reports';
-export type Modal = 'product' | 'cart' | 'account' | 'appointment' | 'support' | 'prescription' | null;
+export type Modal = 'product' | 'cart' | 'account' | 'appointment' | 'support' | 'prescription' | 'login' | 'register' | 'forgot-password' | 'reset-password' | null;
 
 export interface Product {
   id: string;

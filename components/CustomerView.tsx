@@ -1,8 +1,9 @@
 import React, { ChangeEvent, useMemo, useState } from 'react';
 import { ArrowRight, CalendarDays, Camera, ChevronDown, CircleHelp, Compass, Filter, ImagePlus, MapPin, Mic, Package, Plus, Search, ShieldCheck, SlidersHorizontal, Star, Store, Truck, Upload, UserRound, X } from 'lucide-react';
-import { categories, products, stores } from '../data';
+import { categories, stores } from '../data';
 import { CartLine, CustomerView as CustomerViewType, Product } from '../types';
 import { ProductCard, ProductStripCard, ProductVisual, SparkleLabel } from './ProductCard';
+import useProductStore from '../store/productStore';
 
 interface CustomerViewProps {
   view: CustomerViewType;
@@ -46,24 +47,25 @@ export const CustomerHeader: React.FC<CustomerViewProps> = ({ view, setView, que
 };
 
 export const CustomerView: React.FC<CustomerViewProps> = (props) => {
+  const { frames } = useProductStore();
   const filtered = useMemo(() => {
     const q = props.query.toLowerCase();
-    return products.filter((p) => {
+    return frames.filter((p) => {
       const matchesQuery = !q || [p.name, p.brand, p.shape, p.category, p.colors.join(' '), p.price.toString()].join(' ').toLowerCase().includes(q) || (q.includes('under') && p.price < 2000) || (q.includes('black') && p.colors.some((c) => c.toLowerCase().includes('black')));
       const matchesCategory = props.category === 'All frames' || p.category === props.category || (props.category === 'Blue-light' && p.lens.includes('Blue-cut')) || (props.category === 'Premium' && p.price > 2500);
       return matchesQuery && matchesCategory;
     });
-  }, [props.query, props.category]);
-  return <div className="min-h-screen bg-base-100"><CustomerHeader {...props} />{props.view === 'home' ? <Home {...props} filtered={filtered} /> : props.view === 'stores' ? <Stores {...props} /> : props.view === 'appointments' ? <AppointmentLanding onModal={props.onModal} /> : <Shop {...props} filtered={filtered} />}</div>;
+  }, [props.query, props.category, frames]);
+  return <div className="min-h-screen bg-base-100"><CustomerHeader {...props} />{props.view === 'home' ? <Home {...props} filtered={filtered} frames={frames} /> : props.view === 'stores' ? <Stores {...props} /> : props.view === 'appointments' ? <AppointmentLanding onModal={props.onModal} /> : <Shop {...props} filtered={filtered} />}</div>;
 };
 
-interface ContentProps extends CustomerViewProps { filtered: Product[] }
+interface ContentProps extends CustomerViewProps { filtered: Product[]; frames?: Product[] }
 
-const Home: React.FC<ContentProps> = ({ ...props }) => <main>
-  <section className="max-w-7xl mx-auto px-4 pt-8 pb-6"><div className="rounded-3xl bg-primary text-primary-content overflow-hidden relative"><div className="p-7 md:p-12 max-w-2xl"><span className="badge badge-secondary mb-4">THE MONSOON EDIT · 20% OFF</span><h1 className="text-4xl md:text-6xl font-black leading-[.95] tracking-tight">See life<br />in your best light.</h1><p className="mt-5 text-primary-content/80 max-w-md">Thoughtful frames, precise eye care, and a little more confidence in every view.</p><div className="flex flex-wrap gap-3 mt-7"><button className="btn btn-secondary" onClick={() => { props.setView('shop'); props.setCategory('All frames'); }}>Explore frames <ArrowRight size={17} /></button><button className="btn btn-ghost text-primary-content hover:bg-primary-content/10" onClick={() => props.onModal('appointment')}><CalendarDays size={16} /> Book eye test</button></div></div><div className="hero-frame-art hidden md:block"><ProductVisual product={products[0]} /></div><div className="absolute -right-16 -bottom-20 h-64 w-64 rounded-full border border-primary-content/20" /></div></section>
+const Home: React.FC<ContentProps> = ({ frames = [], ...props }) => <main>
+  <section className="max-w-7xl mx-auto px-4 pt-8 pb-6"><div className="rounded-3xl bg-primary text-primary-content overflow-hidden relative"><div className="p-7 md:p-12 max-w-2xl"><span className="badge badge-secondary mb-4">THE MONSOON EDIT · 20% OFF</span><h1 className="text-4xl md:text-6xl font-black leading-[.95] tracking-tight">See life<br />in your best light.</h1><p className="mt-5 text-primary-content/80 max-w-md">Thoughtful frames, precise eye care, and a little more confidence in every view.</p><div className="flex flex-wrap gap-3 mt-7"><button className="btn btn-secondary" onClick={() => { props.setView('shop'); props.setCategory('All frames'); }}>Explore frames <ArrowRight size={17} /></button><button className="btn btn-ghost text-primary-content hover:bg-primary-content/10" onClick={() => props.onModal('appointment')}><CalendarDays size={16} /> Book eye test</button></div></div><div className="hero-frame-art hidden md:block">{frames.length > 0 && <ProductVisual product={frames[0]} />}</div><div className="absolute -right-16 -bottom-20 h-64 w-64 rounded-full border border-primary-content/20" /></div></section>
   <section className="max-w-7xl mx-auto px-4 py-5"><div className="flex items-center justify-between mb-4"><div><p className="text-sm font-semibold">Find your frame</p><p className="text-xs text-base-content/60">Curated for every face and every day</p></div><button className="btn btn-ghost btn-sm" onClick={() => props.setView('shop')}>View all <ArrowRight size={15} /></button></div><div className="flex gap-2 overflow-x-auto pb-2">{categories.map((c, i) => <button key={c} className={`btn btn-sm whitespace-nowrap ${i === 0 ? 'btn-primary' : 'btn-outline'}`} onClick={() => { props.setCategory(c); props.setView('shop'); }}>{c}</button>)}</div></section>
-  <section className="max-w-7xl mx-auto px-4 py-8"><SectionHeading eyebrow="Fresh perspective" title="New arrivals" action={() => props.setView('shop')} /><div className="flex gap-3 overflow-x-auto pb-2">{products.slice(1, 6).map((p) => <ProductStripCard key={p.id} product={p} onOpen={props.onOpen} />)}</div></section>
-  <section className="max-w-7xl mx-auto px-4 py-8"><div className="flex items-end justify-between mb-5"><div><p className="text-xs uppercase tracking-[.2em] text-primary font-semibold">Made for your face</p><h2 className="text-2xl font-bold">Recommended frames</h2></div><SparkleLabel /></div><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{products.slice(0, 4).map((p) => <ProductCard key={p.id} product={p} wished={props.wished.includes(p.id)} onWish={props.onWish} onOpen={props.onOpen} onAdd={props.onAdd} />)}</div></section>
+  <section className="max-w-7xl mx-auto px-4 py-8"><SectionHeading eyebrow="Fresh perspective" title="New arrivals" action={() => props.setView('shop')} /><div className="flex gap-3 overflow-x-auto pb-2">{frames.slice(1, 6).map((p) => <ProductStripCard key={p.id} product={p} onOpen={props.onOpen} />)}</div></section>
+  <section className="max-w-7xl mx-auto px-4 py-8"><div className="flex items-end justify-between mb-5"><div><p className="text-xs uppercase tracking-[.2em] text-primary font-semibold">Made for your face</p><h2 className="text-2xl font-bold">Recommended frames</h2></div><SparkleLabel /></div><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{frames.slice(0, 4).map((p) => <ProductCard key={p.id} product={p} wished={props.wished.includes(p.id)} onWish={props.onWish} onOpen={props.onOpen} onAdd={props.onAdd} />)}</div></section>
   <section className="bg-base-200 border-y border-base-300"><div className="max-w-7xl mx-auto px-4 py-10 grid md:grid-cols-3 gap-4"><PromiseCard icon={<ShieldCheck />} title="Precision, always" text="Every pair is checked by our opticians before it reaches you." /><PromiseCard icon={<Truck />} title="Try at home" text="Free delivery and easy 14-day returns across India." /><PromiseCard icon={<Store />} title="Care, in person" text="Visit a Nayan studio for adjustments and eye tests." /></div></section>
   <section className="max-w-7xl mx-auto px-4 py-10"><div className="flex items-end justify-between mb-5"><div><p className="text-xs uppercase tracking-[.2em] text-primary font-semibold">The community says</p><h2 className="text-2xl font-bold">Kind words, clearly seen.</h2></div><div className="flex items-center gap-1 text-sm"><Star className="fill-warning text-warning" size={16} /> 4.9 from 2,400+ reviews</div></div><div className="grid md:grid-cols-3 gap-3">{[['“The frame finder got my fit exactly right. The delivery felt so considered.”', 'Kavya S. · Bengaluru'], ['“My first pair of progressives, explained patiently and no hard sell.”', 'Suresh R. · Pune'], ['“Beautiful frames at honest prices. The Bandra team is lovely.”', 'Rhea M. · Mumbai']].map(([quote, by]) => <div className="card bg-base-200 border border-base-300" key={by}><div className="card-body p-5"><div className="flex text-warning">{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={14} className="fill-current" />)}</div><p className="mt-3 text-sm leading-relaxed">{quote}</p><p className="text-xs text-base-content/60 mt-2">{by}</p></div></div>)}</div></section>
 </main>;

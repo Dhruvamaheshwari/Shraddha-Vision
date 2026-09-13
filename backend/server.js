@@ -4,6 +4,8 @@ const cors = require('cors');
 require('dotenv').config();
 
 const authRoutes = require('./routes/authRoutes');
+const staffRoutes = require('./routes/staffRoutes');
+const frameRoutes = require('./routes/frameRoutes');
 
 const app = express();
 
@@ -13,6 +15,8 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/staff', staffRoutes);
+app.use('/api/frames', frameRoutes);
 
 // Error Handling Middleware
 app.use((err, req, res, next) => {
