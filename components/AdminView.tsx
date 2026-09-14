@@ -1196,7 +1196,470 @@ const CustomersAdmin: React.FC = () => {
   );
 };
 
-const LensAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => { const [ack, setAck] = useState<string[]>([]); const lens = [['1.60 Blue-cut', 'Medium', '12', '20'], ['Photochromic Brown', '1.56', '7', '15'], ['Kids Flex Temple', 'Small', '9', '12'], ['Anti-glare Clear', '1.56', '84', '25'], ['Polarised Grey', 'Sun', '42', '20']]; return <><AdminHeading eyebrow="Inventory" title="Lens stock" action={<button className="btn btn-primary" onClick={() => toast('Reorder request sent to suppliers', 'success')}><Plus size={16} /> Create reorder</button>} /><div className="alert alert-warning mb-5"><AlertTriangle size={18} /><div><p className="font-semibold">3 items need attention</p><p className="text-xs">Acknowledge alerts to keep your queue clean. Acknowledged alerts return when stock changes.</p></div></div><div className="card bg-base-100 border border-base-300"><div className="card-body p-4"><div className="flex justify-between items-center"><div><h2 className="font-bold">Lens inventory</h2><p className="text-xs text-base-content/60">Updated 4 minutes ago</p></div><button className="btn btn-ghost btn-sm"><Download size={15} /> Export</button></div><div className="overflow-x-auto mt-3"><table className="table"><thead><tr><th>Lens / material</th><th>Variant</th><th>On hand</th><th>Threshold</th><th>Health</th><th>Action</th></tr></thead><tbody>{lens.map((row) => { const low = Number(row[2]) < Number(row[3]); const isAck = ack.includes(row[0]); return <tr key={row[0]}><td className="font-semibold">{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td><span className={`badge badge-sm ${low && !isAck ? 'badge-warning' : 'badge-success'}`}>{low && !isAck ? 'Low stock' : isAck ? 'Acknowledged' : 'Healthy'}</span></td><td>{low && !isAck ? <button className="btn btn-outline btn-xs" onClick={() => { setAck([...ack, row[0]]); toast(`${row[0]} alert acknowledged`, 'info'); }}>Acknowledge</button> : <span className="text-xs text-base-content/50">No action</span>}</td></tr> })}</tbody></table></div></div></div></> };
+const LensAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
+  const [lenses, setLenses] = useState<any[]>([]);
+  const [dealers, setDealers] = useState<any[]>([]);
+  const [reorders, setReorders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { token, user } = useAuthStore();
+
+  const [showReorderModal, setShowReorderModal] = useState(false);
+  const [selectedLens, setSelectedLens] = useState<any>(null);
+  const [reorderQty, setReorderQty] = useState('');
+  const [waMessage, setWaMessage] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const [showReceiveModal, setShowReceiveModal] = useState(false);
+  const [selectedReorder, setSelectedReorder] = useState<any>(null);
+  const [receiveQty, setReceiveQty] = useState('');
+
+  const [showDealerModal, setShowDealerModal] = useState(false);
+  const [dealerForm, setDealerForm] = useState({ id: '', name: '', whatsappNumber: '', companyName: '', address: '' });
+
+  const [showAddLensModal, setShowAddLensModal] = useState(false);
+  const [lensForm, setLensForm] = useState({ material: '', variant: '', currentStock: '', threshold: '', dealer: '' });
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [lensRes, reorderRes, dealerRes] = await Promise.all([
+        axios.get('http://localhost:5000/api/inventory/lenses', { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get('http://localhost:5000/api/reorders', { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get('http://localhost:5000/api/dealers', { headers: { Authorization: `Bearer ${token}` } })
+      ]);
+      setLenses(lensRes.data);
+      setReorders(reorderRes.data);
+      setDealers(dealerRes.data);
+    } catch (err) {
+      console.error(err);
+      toast?.('Failed to load data', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 30000); 
+    return () => clearInterval(interval);
+  }, [token]);
+
+  const handleAcknowledge = async (id: string) => {
+    try {
+      await axios.post(`http://localhost:5000/api/inventory/lenses/${id}/acknowledge`, {}, { headers: { Authorization: `Bearer ${token}` } });
+      toast?.('Alert acknowledged', 'info');
+      fetchData();
+    } catch (err) {
+      toast?.('Failed to acknowledge', 'error');
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const res = await axios.get('http://localhost:5000/api/inventory/lenses/export', { 
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'lens_inventory.csv');
+      document.body.appendChild(link);
+      link.click();
+      toast?.('Inventory exported', 'success');
+    } catch (err) {
+      toast?.('Failed to export', 'error');
+    }
+  };
+
+  const openReorderModal = (lens: any = null) => {
+    setSelectedLens(lens);
+    if (lens) {
+      const suggested = Math.max(lens.threshold - lens.currentStock, lens.threshold);
+      setReorderQty(suggested.toString());
+      generateMessage(lens, suggested.toString());
+    } else {
+      setReorderQty('');
+      setWaMessage('');
+    }
+    setShowReorderModal(true);
+  };
+
+  const generateMessage = (lens: any, qty: string) => {
+    if (!lens || !lens.dealer) return;
+    const msg = `Hello ${lens.dealer.name},\n\n${lens.material} ${lens.variant} lens ka stock low hai.\n\nCurrent stock: ${lens.currentStock}\nRequired quantity: ${qty}\n\nPlease confirm availability.\n\nReply OK to confirm.`;
+    setWaMessage(msg);
+  };
+
+  const handleReorderSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLens || !reorderQty || !waMessage) return;
+    setSending(true);
+    try {
+      await axios.post('http://localhost:5000/api/reorders', {
+        dealerId: selectedLens.dealer._id,
+        lensId: selectedLens._id,
+        variant: selectedLens.variant,
+        quantity: Number(reorderQty),
+        message: waMessage
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      toast?.('Reorder sent via WhatsApp', 'success');
+      setShowReorderModal(false);
+      fetchData();
+    } catch (err) {
+      toast?.('Failed to send reorder', 'error');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleReceiveStock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await axios.post(`http://localhost:5000/api/reorders/${selectedReorder._id}/receive`, {
+        receivedQuantity: Number(receiveQty),
+        notes: 'Received by ' + user?.name
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      toast?.('Stock received and updated', 'success');
+      setShowReceiveModal(false);
+      fetchData();
+    } catch (err) {
+      toast?.('Failed to receive stock', 'error');
+    }
+  };
+
+  const handleDealerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (dealerForm.id) {
+        await axios.put(`http://localhost:5000/api/dealers/${dealerForm.id}`, dealerForm, { headers: { Authorization: `Bearer ${token}` } });
+        toast?.('Dealer updated', 'success');
+      } else {
+        await axios.post('http://localhost:5000/api/dealers', dealerForm, { headers: { Authorization: `Bearer ${token}` } });
+        toast?.('Dealer created', 'success');
+      }
+      setShowDealerModal(false);
+      setDealerForm({ id: '', name: '', whatsappNumber: '', companyName: '', address: '' });
+      fetchData();
+    } catch (err) {
+      toast?.('Failed to save dealer', 'error');
+    }
+  };
+
+  const handleLensSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await axios.post('http://localhost:5000/api/inventory/lenses', {
+        ...lensForm,
+        currentStock: Number(lensForm.currentStock),
+        threshold: Number(lensForm.threshold)
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      toast?.('Lens added', 'success');
+      setShowAddLensModal(false);
+      setLensForm({ material: '', variant: '', currentStock: '', threshold: '', dealer: '' });
+      fetchData();
+    } catch (err) {
+      toast?.('Failed to add lens', 'error');
+    }
+  };
+
+  const activeAlerts = lenses.filter(l => l.currentStock <= l.threshold && !l.lastAcknowledgedAt);
+
+  return (
+    <>
+      <AdminHeading 
+        eyebrow="Inventory" 
+        title="Lens stock" 
+        action={
+          <div className="flex gap-2">
+            <button className="btn btn-outline" onClick={() => { setDealerForm({ id: '', name: '', whatsappNumber: '', companyName: '', address: '' }); setShowDealerModal(true); }}><Store size={16} /> Dealers</button>
+            <button className="btn btn-outline" onClick={() => setShowAddLensModal(true)}><Plus size={16} /> Add Lens</button>
+            <button className="btn btn-primary" onClick={() => openReorderModal()}><Plus size={16} /> Create reorder</button>
+          </div>
+        } 
+      />
+      
+      {activeAlerts.length > 0 && (
+        <div className="alert alert-warning mb-5">
+          <AlertTriangle size={18} />
+          <div>
+            <p className="font-semibold">{activeAlerts.length} items need attention</p>
+            <p className="text-xs">Acknowledge alerts to keep your queue clean. Acknowledged alerts return when stock changes.</p>
+          </div>
+        </div>
+      )}
+
+      <div className="card bg-base-100 border border-base-300">
+        <div className="card-body p-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="font-bold">Lens inventory</h2>
+              <p className="text-xs text-base-content/60">Updated just now</p>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={handleExport}><Download size={15} /> Export</button>
+          </div>
+          
+          <div className="overflow-x-auto mt-3">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Lens / material</th>
+                  <th>Variant</th>
+                  <th>On hand</th>
+                  <th>Threshold</th>
+                  <th>Health</th>
+                  <th>Dealer</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading && lenses.length === 0 ? (
+                   <tr><td colSpan={7} className="text-center py-4"><span className="loading loading-spinner"></span></td></tr>
+                ) : lenses.map((l) => {
+                  const low = l.currentStock <= l.threshold;
+                  const isAck = !!l.lastAcknowledgedAt;
+                  return (
+                    <tr key={l._id}>
+                      <td className="font-semibold">{l.material}</td>
+                      <td>{l.variant}</td>
+                      <td className={low ? 'font-bold text-error' : ''}>{l.currentStock}</td>
+                      <td>{l.threshold}</td>
+                      <td>
+                        <span className={`badge badge-sm ${low && !isAck ? 'badge-warning' : isAck && low ? 'badge-neutral' : 'badge-success'}`}>
+                          {low && !isAck ? 'Low stock' : isAck && low ? 'Acknowledged' : 'Healthy'}
+                        </span>
+                      </td>
+                      <td className="text-xs">{l.dealer?.name || '—'}</td>
+                      <td>
+                        {low && !isAck ? (
+                          <button className="btn btn-outline btn-xs" onClick={() => handleAcknowledge(l._id)}>Acknowledge</button>
+                        ) : low && isAck ? (
+                          <button className="btn btn-primary btn-xs" onClick={() => openReorderModal(l)}>Reorder Now</button>
+                        ) : (
+                          <span className="text-xs text-base-content/50">No action</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div className="card bg-base-100 border border-base-300 mt-6">
+        <div className="card-body p-4">
+          <h2 className="font-bold mb-2">Reorder History</h2>
+          <div className="overflow-x-auto">
+            <table className="table table-sm">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Dealer</th>
+                  <th>Lens</th>
+                  <th>Qty</th>
+                  <th>WhatsApp Status</th>
+                  <th>Order Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reorders.map(r => (
+                  <tr key={r._id}>
+                    <td>{new Date(r.createdAt).toLocaleDateString()}</td>
+                    <td>{r.dealer?.name}</td>
+                    <td>{r.lens?.material} {r.variant}</td>
+                    <td>{r.quantity}</td>
+                    <td>
+                      <div className="flex flex-col gap-1 text-xs">
+                        {r.sentAt && <span className="text-info">Sent</span>}
+                        {r.deliveredAt && <span className="text-primary">Delivered</span>}
+                        {r.readAt && <span className="text-success font-medium">Seen</span>}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`badge badge-sm ${r.status === 'CONFIRMED' ? 'badge-success' : r.status === 'RECEIVED' ? 'badge-neutral' : 'badge-outline'}`}>
+                        {r.status === 'CONFIRMED' ? '✅ Dealer Confirmed' : r.status}
+                      </span>
+                    </td>
+                    <td>
+                      {r.status === 'CONFIRMED' && (
+                        <button className="btn btn-xs btn-primary" onClick={() => { setSelectedReorder(r); setReceiveQty(r.quantity.toString()); setShowReceiveModal(true); }}>Receive Stock</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {showReorderModal && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-4">Create Reorder</h3>
+            <form onSubmit={handleReorderSubmit} className="space-y-4">
+              <div className="form-control">
+                <label className="label text-sm font-semibold">Select Lens to Reorder</label>
+                <select className="select select-bordered" value={selectedLens?._id || ''} onChange={(e) => {
+                  const l = lenses.find(x => x._id === e.target.value);
+                  openReorderModal(l);
+                }}>
+                  <option value="" disabled>Select lens...</option>
+                  {lenses.map(l => <option key={l._id} value={l._id}>{l.material} {l.variant}</option>)}
+                </select>
+              </div>
+
+              {selectedLens && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-base-200 p-3 rounded-xl">
+                      <p className="text-xs text-base-content/60">Current Stock</p>
+                      <p className="text-lg font-bold">{selectedLens.currentStock} <span className="text-xs font-normal opacity-50">/ {selectedLens.threshold} (Threshold)</span></p>
+                    </div>
+                    <div className="bg-base-200 p-3 rounded-xl">
+                      <p className="text-xs text-base-content/60">Dealer</p>
+                      <p className="font-medium">{selectedLens.dealer?.name}</p>
+                      <p className="text-xs">{selectedLens.dealer?.whatsappNumber}</p>
+                    </div>
+                  </div>
+
+                  <div className="form-control">
+                    <label className="label text-sm font-semibold">Required Quantity</label>
+                    <input type="number" className="input input-bordered" value={reorderQty} onChange={(e) => { setReorderQty(e.target.value); generateMessage(selectedLens, e.target.value); }} min="1" required />
+                  </div>
+
+                  <div className="form-control">
+                    <label className="label text-sm font-semibold">WhatsApp Message Preview</label>
+                    <textarea className="textarea textarea-bordered h-32 text-sm" value={waMessage} onChange={e => setWaMessage(e.target.value)} required />
+                    <label className="label"><span className="label-text-alt text-base-content/50">This message will be sent via WhatsApp automatically.</span></label>
+                  </div>
+                </>
+              )}
+
+              <div className="modal-action">
+                <button type="button" className="btn btn-ghost" onClick={() => setShowReorderModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={sending || !selectedLens}>
+                  {sending ? <span className="loading loading-spinner"></span> : 'Send via WhatsApp'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showReceiveModal && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-sm">
+            <h3 className="font-bold text-lg mb-2">Receive Stock</h3>
+            <p className="text-sm mb-4">You are receiving stock for {selectedReorder?.lens?.material}.</p>
+            <form onSubmit={handleReceiveStock} className="space-y-4">
+              <div className="form-control">
+                <label className="label text-sm font-semibold">Received Quantity</label>
+                <input type="number" className="input input-bordered" value={receiveQty} onChange={e => setReceiveQty(e.target.value)} min="1" required />
+              </div>
+              <div className="modal-action">
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowReceiveModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary btn-sm">Update Inventory</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showDealerModal && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-2xl">
+            <button className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3" onClick={() => setShowDealerModal(false)}><X size={16} /></button>
+            <h3 className="font-bold text-lg mb-4">Manage Dealers</h3>
+            
+            <div className="flex gap-4">
+              <div className="w-1/2 border-r pr-4 max-h-[50vh] overflow-y-auto">
+                <h4 className="text-sm font-semibold mb-3">Existing Dealers</h4>
+                {dealers.map(d => (
+                  <div key={d._id} className="bg-base-200 p-3 rounded-lg mb-2 flex justify-between items-center cursor-pointer hover:bg-base-300" onClick={() => setDealerForm({ id: d._id, name: d.name, whatsappNumber: d.whatsappNumber, companyName: d.companyName, address: d.address || '' })}>
+                    <div>
+                      <p className="font-semibold text-sm">{d.name}</p>
+                      <p className="text-xs text-base-content/60">{d.companyName} • {d.whatsappNumber}</p>
+                    </div>
+                    <Pencil size={14} className="opacity-50" />
+                  </div>
+                ))}
+              </div>
+              
+              <div className="w-1/2">
+                <h4 className="text-sm font-semibold mb-3">{dealerForm.id ? 'Edit Dealer' : 'Add New Dealer'}</h4>
+                <form onSubmit={handleDealerSubmit} className="space-y-3">
+                  <div className="form-control">
+                    <label className="label text-xs">Name</label>
+                    <input type="text" className="input input-bordered input-sm" value={dealerForm.name} onChange={e => setDealerForm({...dealerForm, name: e.target.value})} required />
+                  </div>
+                  <div className="form-control">
+                    <label className="label text-xs">WhatsApp Number</label>
+                    <input type="text" className="input input-bordered input-sm" value={dealerForm.whatsappNumber} onChange={e => setDealerForm({...dealerForm, whatsappNumber: e.target.value})} required placeholder="e.g. 919876543210" />
+                  </div>
+                  <div className="form-control">
+                    <label className="label text-xs">Company Name</label>
+                    <input type="text" className="input input-bordered input-sm" value={dealerForm.companyName} onChange={e => setDealerForm({...dealerForm, companyName: e.target.value})} required />
+                  </div>
+                  <div className="form-control">
+                    <label className="label text-xs">Address</label>
+                    <input type="text" className="input input-bordered input-sm" value={dealerForm.address} onChange={e => setDealerForm({...dealerForm, address: e.target.value})} />
+                  </div>
+                  <div className="flex gap-2 justify-end mt-4">
+                    {dealerForm.id && <button type="button" className="btn btn-sm btn-ghost" onClick={() => setDealerForm({ id: '', name: '', whatsappNumber: '', companyName: '', address: '' })}>Clear</button>}
+                    <button type="submit" className="btn btn-sm btn-primary">{dealerForm.id ? 'Update Dealer' : 'Save Dealer'}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddLensModal && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-sm">
+            <h3 className="font-bold text-lg mb-4">Add Lens Variety</h3>
+            <form onSubmit={handleLensSubmit} className="space-y-3">
+              <div className="form-control">
+                <label className="label text-xs">Material / Name</label>
+                <input type="text" className="input input-bordered input-sm" value={lensForm.material} onChange={e => setLensForm({...lensForm, material: e.target.value})} placeholder="e.g. 1.67 High Index" required />
+              </div>
+              <div className="form-control">
+                <label className="label text-xs">Variant / Type</label>
+                <input type="text" className="input input-bordered input-sm" value={lensForm.variant} onChange={e => setLensForm({...lensForm, variant: e.target.value})} placeholder="e.g. Blue-cut" required />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="form-control">
+                  <label className="label text-xs">Current Stock</label>
+                  <input type="number" className="input input-bordered input-sm" value={lensForm.currentStock} onChange={e => setLensForm({...lensForm, currentStock: e.target.value})} min="0" required />
+                </div>
+                <div className="form-control">
+                  <label className="label text-xs">Threshold</label>
+                  <input type="number" className="input input-bordered input-sm" value={lensForm.threshold} onChange={e => setLensForm({...lensForm, threshold: e.target.value})} min="1" required />
+                </div>
+              </div>
+              <div className="form-control">
+                <label className="label text-xs">Primary Dealer</label>
+                <select className="select select-bordered select-sm" value={lensForm.dealer} onChange={e => setLensForm({...lensForm, dealer: e.target.value})} required>
+                  <option value="" disabled>Select a dealer...</option>
+                  {dealers.map(d => <option key={d._id} value={d._id}>{d.name} ({d.companyName})</option>)}
+                </select>
+              </div>
+              <div className="modal-action">
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowAddLensModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary btn-sm">Add Lens</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
 
 const Analytics: React.FC = () => { const [period, setPeriod] = useState('7 days'); return <><AdminHeading eyebrow="Discovery" title="Search analytics" action={<select className="select select-bordered select-sm" value={period} onChange={(e) => setPeriod(e.target.value)}><option>7 days</option><option>30 days</option><option>90 days</option></select>} /><div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3"><Kpi label="Searches" value="12,486" delta="22.8%" icon={<Search />} /><Kpi label="Image searches" value="1,284" delta="36.2%" icon={<Boxes />} tone="secondary" /><Kpi label="Zero-result searches" value="184" delta="9.1%" icon={<AlertTriangle />} tone="warning" /><Kpi label="Search → purchase" value="8.4%" delta="1.8%" icon={<ShoppingCart />} tone="info" /></div><div className="grid xl:grid-cols-2 gap-4 mt-4"><div className="card bg-base-100 border border-base-300"><div className="card-body"><h2 className="font-bold">Top searched keywords</h2><p className="text-xs text-base-content/60">Popular intent this {period}</p><div className="space-y-3 mt-5">{[['black round glasses', '1,842', 86], ['blue light glasses', '1,206', 66], ['glasses under 2000', '984', 53], ['cat eye frames', '766', 42], ['sunglasses for driving', '522', 28]].map(([key, count, width]) => <div key={String(key)}><div className="flex justify-between text-sm"><span>{key}</span><span className="text-base-content/60">{count}</span></div><progress className="progress progress-primary w-full" value={Number(width)} max={100} /></div>)}</div></div></div><div className="card bg-base-100 border border-base-300"><div className="card-body"><h2 className="font-bold">Search intent signals</h2><p className="text-xs text-base-content/60">What shoppers refine by</p><div className="grid grid-cols-2 gap-3 mt-5">{[['Shape', 'Round', '32%'], ['Budget', 'Under ₹2k', '28%'], ['Brand', 'Nayan House', '21%'], ['Lens', 'Blue-cut', '19%']].map(([label, value, share]) => <div className="bg-base-200 rounded-xl p-4" key={label}><p className="text-xs text-base-content/60">{label}</p><p className="font-bold mt-2">{value}</p><p className="text-xs text-primary mt-1">{share} of searches</p></div>)}</div></div></div></div></> };
 
