@@ -198,6 +198,44 @@ router.post('/', requireAuth, async (req, res) => {
 
     const savedOrder = await newOrder.save();
 
+    // Search Analytics Attribution
+    const { sessionId } = req.body;
+    try {
+      const SearchEvent = require('../models/SearchEvent');
+      const attributionWindow = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      
+      const query = {
+        createdAt: { $gte: attributionWindow },
+        $or: [{ user: req.user._id }]
+      };
+      if (sessionId) {
+        query.$or.push({ sessionId });
+      }
+
+      const productIdsStr = validatedItems.map(vi => vi.productId.toString());
+      
+      const relatedSearches = await SearchEvent.find(query);
+      for (const search of relatedSearches) {
+        // If exact product match or it's just a fallback (they didn't click it but they searched and bought same session)
+        // We prefer exact product match in resultProductIds
+        let matched = false;
+        if (search.resultProductIds && search.resultProductIds.length > 0) {
+          matched = search.resultProductIds.some(id => productIdsStr.includes(id.toString()));
+        } else {
+          // fallback: same session attribution if results weren't tracked for some reason
+          matched = true;
+        }
+
+        if (matched) {
+          search.convertedToPurchase = true;
+          search.order = savedOrder._id;
+          await search.save();
+        }
+      }
+    } catch (attrError) {
+      console.error('Failed to attribute search event', attrError);
+    }
+
     // Ledger entry
     const user = await User.findById(req.user._id);
     const newBalance = (user.outstandingBalance || 0) + outstanding;

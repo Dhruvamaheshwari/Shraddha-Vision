@@ -43,8 +43,19 @@ export const AppShell: React.FC = () => {
     const id = Date.now(); setToasts((prev) => [...prev, { id, message, tone }]);
     window.setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3000);
   }, []);
-  const addToCart = useCallback((product: Product) => { setCart((prev) => { const found = prev.find((line) => line.product.id === product.id); return found ? prev.map((line) => line.product.id === product.id ? { ...line, quantity: line.quantity + 1 } : line) : [...prev, { product, quantity: 1, lens: product.lens[0] }]; }); toast(`${product.name} added to your bag`); }, [toast]);
-  const openProduct = (product: Product) => { setSelected(product); setModal('product'); };
+  const trackInteract = (selectedProduct?: string, addedToCart?: boolean) => {
+    const eventId = localStorage.getItem('lastSearchEventId');
+    const sessionId = localStorage.getItem('sessionId');
+    if (!eventId) return;
+    const token = localStorage.getItem('token');
+    fetch(`http://localhost:5000/api/analytics/search-event/${eventId}/interact`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), 'x-session-id': sessionId || '' },
+      body: JSON.stringify({ selectedProduct, addedToCart })
+    }).catch(console.error);
+  };
+  const addToCart = useCallback((product: Product) => { trackInteract(product.id, true); setCart((prev) => { const found = prev.find((line) => line.product.id === product.id); return found ? prev.map((line) => line.product.id === product.id ? { ...line, quantity: line.quantity + 1 } : line) : [...prev, { product, quantity: 1, lens: product.lens[0] }]; }); toast(`${product.name} added to your bag`); }, [toast]);
+  const openProduct = (product: Product) => { trackInteract(product.id); setSelected(product); setModal('product'); };
   const toggleWish = useCallback((product: Product) => { setWished((prev) => { const next = prev.includes(product.id) ? prev.filter((id) => id !== product.id) : [...prev, product.id]; toast(next.includes(product.id) ? 'Saved to your wishlist' : 'Removed from wishlist', next.includes(product.id) ? 'success' : 'info'); return next; }); }, [toast]);
   const setQuantity = (id: string, delta: number) => setCart((prev) => prev.map((line) => line.product.id === id ? { ...line, quantity: line.quantity + delta } : line).filter((line) => line.quantity > 0));
   const total = cart.reduce((sum, line) => sum + line.product.price * line.quantity, 0);
@@ -205,11 +216,13 @@ const CartModal: React.FC<{ cart: CartLine[]; total: number; discount: number; p
     setLoading(true);
     try {
       const items = cart.map(line => ({ productId: line.product.id, quantity: line.quantity }));
+      const sessionId = localStorage.getItem('sessionId');
       const orderData = {
         items,
         shippingAddress: address === 'home' ? { street: '12, Palm Grove', city: 'Mumbai', state: 'MH', zipCode: '400050' } : { street: 'Bandra Studio', city: 'Mumbai', state: 'MH', zipCode: '400050' },
         notes: coupon ? `Coupon: ${coupon}` : '',
-        amountPaid: customPayAmount ? Number(customPayAmount) : totalPayable
+        amountPaid: customPayAmount ? Number(customPayAmount) : totalPayable,
+        sessionId
       };
       const result = await createOrder(orderData);
       setConfirmedOrderId(result.orderNumber);

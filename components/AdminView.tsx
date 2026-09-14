@@ -1661,7 +1661,76 @@ const LensAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
   );
 };
 
-const Analytics: React.FC = () => { const [period, setPeriod] = useState('7 days'); return <><AdminHeading eyebrow="Discovery" title="Search analytics" action={<select className="select select-bordered select-sm" value={period} onChange={(e) => setPeriod(e.target.value)}><option>7 days</option><option>30 days</option><option>90 days</option></select>} /><div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3"><Kpi label="Searches" value="12,486" delta="22.8%" icon={<Search />} /><Kpi label="Image searches" value="1,284" delta="36.2%" icon={<Boxes />} tone="secondary" /><Kpi label="Zero-result searches" value="184" delta="9.1%" icon={<AlertTriangle />} tone="warning" /><Kpi label="Search → purchase" value="8.4%" delta="1.8%" icon={<ShoppingCart />} tone="info" /></div><div className="grid xl:grid-cols-2 gap-4 mt-4"><div className="card bg-base-100 border border-base-300"><div className="card-body"><h2 className="font-bold">Top searched keywords</h2><p className="text-xs text-base-content/60">Popular intent this {period}</p><div className="space-y-3 mt-5">{[['black round glasses', '1,842', 86], ['blue light glasses', '1,206', 66], ['glasses under 2000', '984', 53], ['cat eye frames', '766', 42], ['sunglasses for driving', '522', 28]].map(([key, count, width]) => <div key={String(key)}><div className="flex justify-between text-sm"><span>{key}</span><span className="text-base-content/60">{count}</span></div><progress className="progress progress-primary w-full" value={Number(width)} max={100} /></div>)}</div></div></div><div className="card bg-base-100 border border-base-300"><div className="card-body"><h2 className="font-bold">Search intent signals</h2><p className="text-xs text-base-content/60">What shoppers refine by</p><div className="grid grid-cols-2 gap-3 mt-5">{[['Shape', 'Round', '32%'], ['Budget', 'Under ₹2k', '28%'], ['Brand', 'Nayan House', '21%'], ['Lens', 'Blue-cut', '19%']].map(([label, value, share]) => <div className="bg-base-200 rounded-xl p-4" key={label}><p className="text-xs text-base-content/60">{label}</p><p className="font-bold mt-2">{value}</p><p className="text-xs text-primary mt-1">{share} of searches</p></div>)}</div></div></div></div></> };
+const Analytics: React.FC = () => { 
+  const [period, setPeriod] = useState('7 days'); 
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const { token } = useAuthStore();
+  
+  useEffect(() => {
+    setLoading(true);
+    axios.get(`http://localhost:5000/api/analytics/search?range=${period}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => setData(res.data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [period, token]);
+
+  const calcDelta = (curr: number, prev: number) => {
+    if (prev === 0) return curr > 0 ? '+100%' : '0%';
+    const pct = ((curr - prev) / prev) * 100;
+    return `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
+  };
+
+  return <><AdminHeading eyebrow="Discovery" title="Search analytics" action={<select className="select select-bordered select-sm" value={period} onChange={(e) => setPeriod(e.target.value)}><option>7 days</option><option>30 days</option><option>90 days</option></select>} />
+    {loading ? <div className="flex justify-center p-12"><span className="loading loading-spinner text-primary"></span></div> : !data ? <div className="text-center p-12">Failed to load analytics</div> : (
+      <>
+        <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <Kpi label="Searches" value={data.summary.searches.toLocaleString('en-IN')} delta={calcDelta(data.summary.searches, data.comparison.searches)} icon={<Search />} />
+          <Kpi label="Image searches" value={data.summary.imageSearches.toLocaleString('en-IN')} delta={calcDelta(data.summary.imageSearches, data.comparison.imageSearches)} icon={<Boxes />} tone="secondary" />
+          <Kpi label="Zero-result searches" value={data.summary.zeroResultSearches.toLocaleString('en-IN')} delta={calcDelta(data.summary.zeroResultSearches, data.comparison.zeroResultSearches)} icon={<AlertTriangle />} tone="warning" />
+          <Kpi label="Search → purchase" value={`${data.summary.searchToPurchase.toFixed(1)}%`} delta={calcDelta(data.summary.searchToPurchase, data.comparison.searchToPurchase)} icon={<ShoppingCart />} tone="info" />
+        </div>
+        <div className="grid xl:grid-cols-2 gap-4 mt-4">
+          <div className="card bg-base-100 border border-base-300">
+            <div className="card-body">
+              <h2 className="font-bold">Top searched keywords</h2>
+              <p className="text-xs text-base-content/60">Popular intent this {period}</p>
+              <div className="space-y-3 mt-5">
+                {data.topKeywords.length === 0 ? <p className="text-center text-sm text-base-content/60 py-4">No text searches yet.</p> : 
+                 data.topKeywords.map((k: any) => (
+                  <div key={k.keyword}>
+                    <div className="flex justify-between text-sm"><span>{k.keyword}</span><span className="text-base-content/60">{k.count}</span></div>
+                    <progress className="progress progress-primary w-full" value={k.count} max={data.topKeywords[0]?.count || 100} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="card bg-base-100 border border-base-300">
+            <div className="card-body">
+              <h2 className="font-bold">Search intent signals</h2>
+              <p className="text-xs text-base-content/60">What shoppers refine by</p>
+              <div className="grid grid-cols-2 gap-3 mt-5">
+                {[
+                  ['Shape', data.intentSignals.shape],
+                  ['Budget', data.intentSignals.budget],
+                  ['Brand', data.intentSignals.brand],
+                  ['Lens', data.intentSignals.lens]
+                ].map(([label, sig]: any) => (
+                  <div className="bg-base-200 rounded-xl p-4" key={label}>
+                    <p className="text-xs text-base-content/60">{label}</p>
+                    <p className="font-bold mt-2 truncate">{sig.value || 'None'}</p>
+                    <p className="text-xs text-primary mt-1">{sig.percentage}% of searches</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    )}
+  </>;
+};
 
 const Suppliers: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => <><AdminHeading eyebrow="Partners" title="Suppliers" action={<button className="btn btn-primary" onClick={() => toast('Supplier invite link copied', 'success')}><Plus size={16} /> Add supplier</button>} /><div className="grid md:grid-cols-3 gap-3">{[['OptiLens India', 'Lenses · 1.6 index', '98% on-time', 'Healthy'], ['FrameCraft Works', 'Frames · Private label', '94% on-time', 'Healthy'], ['Sunmark Labs', 'Sun lenses · Polarised', '89% on-time', 'Review due']].map(([name, speciality, metric, status]) => <div className="card bg-base-100 border border-base-300" key={name}><div className="card-body"><div className="flex justify-between"><div className="p-3 rounded-xl bg-secondary/15 text-secondary"><Store size={20} /></div><span className={`badge badge-sm ${status === 'Healthy' ? 'badge-success' : 'badge-warning'}`}>{status}</span></div><h2 className="card-title mt-2">{name}</h2><p className="text-sm text-base-content/60">{speciality}</p><div className="divider my-2" /><p className="text-sm">{metric}</p><button className="btn btn-ghost btn-sm mt-2 justify-between">View supplier <ChevronRight size={15} /></button></div></div>)}</div></>;
 
