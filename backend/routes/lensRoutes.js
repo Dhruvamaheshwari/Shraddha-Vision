@@ -1,6 +1,7 @@
 const express = require('express');
 const LensInventory = require('../models/LensInventory');
 const { requireAuth } = require('../middleware/authMiddleware');
+const { generateCSV } = require('../utils/csvExport');
 
 const router = express.Router();
 
@@ -51,23 +52,40 @@ router.post('/:id/acknowledge', requireAuth, async (req, res) => {
 // @route   GET /api/inventory/lenses/export
 // @desc    Export lens inventory to CSV
 router.get('/export', requireAuth, async (req, res) => {
+  // Require inventory.view permission
+  if (req.user.role === 'STAFF' && (!req.user.permissions || !req.user.permissions.includes('inventory.view'))) {
+    return res.status(403).json({ message: 'Forbidden: Missing inventory.view permission' });
+  }
+  if (req.user.role === 'CUSTOMER') {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+
   try {
     const lenses = await LensInventory.find().populate('dealer');
     
-    let csv = 'Lens/Material,Variant,On Hand,Threshold,Health,Dealer,Last Updated\n';
+    const headers = ['Lens/Material', 'Variant', 'On Hand', 'Threshold', 'Health', 'Dealer', 'Last Updated'];
     
-    lenses.forEach(l => {
+    const rows = lenses.map(l => {
       const health = l.currentStock <= l.threshold ? 'Low Stock' : 'Healthy';
       const dealerName = l.dealer ? l.dealer.name : 'Unknown';
-      csv += `"${l.material}","${l.variant}",${l.currentStock},${l.threshold},"${health}","${dealerName}","${l.updatedAt}"\n`;
+      return [
+        l.material,
+        l.variant,
+        l.currentStock,
+        l.threshold,
+        health,
+        dealerName,
+        new Date(l.updatedAt).toISOString()
+      ];
     });
 
+    const csvData = generateCSV(headers, rows);
     res.header('Content-Type', 'text/csv');
     res.attachment('lens_inventory.csv');
-    return res.send(csv);
+    return res.send(csvData);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error exporting lenses' });
   }
 });
 

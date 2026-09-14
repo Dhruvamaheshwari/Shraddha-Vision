@@ -6,6 +6,7 @@ const Order = require('../models/Order');
 const Prescription = require('../models/Prescription');
 const PaymentTransaction = require('../models/PaymentTransaction');
 const { requireAuth } = require('../middleware/authMiddleware');
+const { generateCSV } = require('../utils/csvExport');
 
 // Helper to check customers.view permission for STAFF
 const requireCustomerView = (req, res, next) => {
@@ -113,6 +114,74 @@ router.get('/', requireAuth, requireCustomerView, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error fetching customers' });
+  }
+});
+
+// @route   GET /api/customers/export
+// @desc    Export customers to CSV
+router.get('/export', requireAuth, requireCustomerView, async (req, res) => {
+  try {
+    const { search } = req.query;
+    let query = { role: 'CUSTOMER' };
+
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      query.$or = [
+        { name: searchRegex },
+        { email: searchRegex },
+        { mobileNumber: searchRegex }
+      ];
+      if (mongoose.Types.ObjectId.isValid(search)) {
+        query.$or.push({ _id: search });
+      }
+    }
+
+    const customers = await User.find(query).sort({ createdAt: -1 }).select('-password');
+    const customerIds = customers.map(c => c._id);
+    
+    const ordersStats = await Order.aggregate([
+      { $match: { customer: { $in: customerIds } } },
+      { $group: {
+          _id: '$customer',
+          totalOrders: { $sum: 1 },
+          lastOrderDate: { $max: '$createdAt' },
+          lifetimeValue: { $sum: '$totalAmount' }
+      }}
+    ]);
+
+    const statsMap = {};
+    ordersStats.forEach(stat => {
+      statsMap[stat._id.toString()] = stat;
+    });
+
+    const headers = [
+      'Customer ID', 'Full Name', 'Email', 'Mobile', 'Account Status', 
+      'Joined Date', 'Total Orders', 'Lifetime Spend', 'Outstanding Balance', 'Last Order Date'
+    ];
+    
+    const rows = customers.map(c => {
+      const stats = statsMap[c._id.toString()] || {};
+      return [
+        c._id,
+        c.name,
+        c.email,
+        c.mobileNumber,
+        c.isActive ? 'Active' : 'Inactive',
+        new Date(c.createdAt).toISOString(),
+        stats.totalOrders || 0,
+        stats.lifetimeValue || 0,
+        c.outstandingBalance || 0,
+        stats.lastOrderDate ? new Date(stats.lastOrderDate).toISOString() : ''
+      ];
+    });
+
+    const csvData = generateCSV(headers, rows);
+    res.header('Content-Type', 'text/csv');
+    res.attachment('customers.csv');
+    return res.send(csvData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error exporting customers' });
   }
 });
 

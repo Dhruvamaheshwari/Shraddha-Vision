@@ -13,6 +13,7 @@ const dealerRoutes = require('./routes/dealerRoutes');
 const reorderRoutes = require('./routes/reorderRoutes');
 const whatsappRoutes = require('./routes/whatsappRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 const app = express();
 
 // Middleware
@@ -30,6 +31,7 @@ app.use('/api/dealers', dealerRoutes);
 app.use('/api/reorders', reorderRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Error Handling Middleware
 app.use((err, req, res, next) => {

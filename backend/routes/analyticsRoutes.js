@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const SearchEvent = require('../models/SearchEvent');
 const Order = require('../models/Order');
 const { requireAuth } = require('../middleware/authMiddleware');
+const { generateCSV } = require('../utils/csvExport');
 
 const router = express.Router();
 
@@ -109,6 +110,118 @@ router.patch('/search-event/:id/interact', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// @route   GET /api/analytics/search/export
+// @desc    Export aggregated search analytics (Admin only)
+router.get('/search/export', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'ADMIN') {
+      // Check for STAFF with analytics.view permission
+      if (req.user.role === 'STAFF' && (!req.user.permissions || !req.user.permissions.includes('analytics.view'))) {
+        return res.status(403).json({ message: 'Forbidden: Missing analytics.view permission' });
+      }
+      if (req.user.role === 'CUSTOMER') {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+    }
+
+    const { range } = req.query; // e.g. 7 days, 30 days, 90 days
+    let days = 7;
+    if (range === '30 days') days = 30;
+    if (range === '90 days') days = 90;
+    
+    const now = new Date();
+    const currentPeriodStart = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+    const matchStage = { createdAt: { $gte: currentPeriodStart, $lt: now } };
+    
+    const [metrics] = await SearchEvent.aggregate([
+      { $match: matchStage },
+      { 
+        $group: {
+          _id: null,
+          searches: { $sum: 1 },
+          imageSearches: { 
+            $sum: { $cond: [{ $eq: ["$searchType", "IMAGE"] }, 1, 0] } 
+          },
+          zeroResultSearches: { 
+            $sum: { $cond: [{ $eq: ["$resultCount", 0] }, 1, 0] } 
+          },
+          convertedSessions: {
+            $addToSet: { $cond: [{ $eq: ["$convertedToPurchase", true] }, "$sessionId", null] }
+          },
+          totalSessions: {
+            $addToSet: "$sessionId"
+          }
+        }
+      }
+    ]);
+
+    let summary = { searches: 0, imageSearches: 0, zeroResultSearches: 0, searchToPurchase: 0 };
+    if (metrics) {
+      const totalS = metrics.totalSessions.filter(x => x).length;
+      const convertedS = metrics.convertedSessions.filter(x => x).length;
+      summary = {
+        searches: metrics.searches,
+        imageSearches: metrics.imageSearches,
+        zeroResultSearches: metrics.zeroResultSearches,
+        searchToPurchase: totalS > 0 ? (convertedS / totalS) * 100 : 0
+      };
+    }
+
+    const topKeywords = await SearchEvent.aggregate([
+      { $match: { createdAt: { $gte: currentPeriodStart }, searchType: 'TEXT', normalizedQuery: { $ne: '' } } },
+      { $group: { _id: "$normalizedQuery", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 1 }
+    ]);
+    const topKeyword = topKeywords.length > 0 ? topKeywords[0]._id : 'None';
+    const topKeywordCount = topKeywords.length > 0 ? topKeywords[0].count : 0;
+
+    const getTopIntent = async (field) => {
+      const res = await SearchEvent.aggregate([
+        { $match: { createdAt: { $gte: currentPeriodStart }, [`filters.${field}`]: { $exists: true, $ne: '' } } },
+        { $group: { _id: `$filters.${field}`, count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 1 }
+      ]);
+      return res.length > 0 ? res[0]._id : 'None';
+    };
+
+    const topShape = await getTopIntent('shape');
+    const topBudget = await getTopIntent('budgetLabel');
+    const topBrand = await getTopIntent('brand');
+    const topLens = await getTopIntent('lens');
+
+    const headers = [
+      'Date Range', 'Total Searches', 'Image Searches', 'Zero Result Searches', 
+      'Search -> Purchase %', 'Top Keyword', 'Top Keyword Count', 
+      'Top Shape', 'Top Budget', 'Top Brand', 'Top Lens'
+    ];
+
+    const rows = [[
+      `${days} days`,
+      summary.searches,
+      summary.imageSearches,
+      summary.zeroResultSearches,
+      `${summary.searchToPurchase.toFixed(1)}%`,
+      topKeyword,
+      topKeywordCount,
+      topShape,
+      topBudget,
+      topBrand,
+      topLens
+    ]];
+
+    const csvData = generateCSV(headers, rows);
+    res.header('Content-Type', 'text/csv');
+    res.attachment(`search-analytics-${days}d.csv`);
+    return res.send(csvData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error exporting analytics' });
   }
 });
 

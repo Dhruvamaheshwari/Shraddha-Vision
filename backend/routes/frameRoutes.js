@@ -3,6 +3,7 @@ const multer = require('multer');
 const cloudinary = require('../config/cloudinary');
 const Frame = require('../models/Frame');
 const { requireAuth, requirePermission } = require('../middleware/authMiddleware');
+const { generateCSV } = require('../utils/csvExport');
 
 const router = express.Router();
 
@@ -72,6 +73,63 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error fetching frames' });
+  }
+});
+
+// @route   GET /api/frames/export
+// @desc    Export frames to CSV
+// @access  Protected (products.view)
+router.get('/export', requireAuth, requirePermission('products.view'), async (req, res) => {
+  try {
+    const { search, category, includeInactive = false } = req.query;
+    
+    let query = {};
+    if (!includeInactive || includeInactive === 'false') {
+      query.status = { $ne: 'INACTIVE' };
+    }
+
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      query.$or = [
+        { name: searchRegex },
+        { code: searchRegex },
+        { brand: searchRegex },
+        { colors: searchRegex },
+        { shape: searchRegex }
+      ];
+    }
+
+    if (category && category !== 'All categories') {
+      query.category = category;
+    }
+
+    const frames = await Frame.find(query).sort({ createdAt: -1 });
+
+    const headers = ['Product ID', 'Product Code', 'Name', 'Brand', 'Category', 'Price', 'Stock', 'Threshold', 'Status', 'Shape', 'Lens Type', 'Color', 'Created At'];
+    
+    const rows = frames.map(f => [
+      f._id,
+      f.code,
+      f.name,
+      f.brand,
+      f.category,
+      f.price,
+      f.stock,
+      f.lowStockThreshold,
+      f.status,
+      f.shape,
+      (f.lens || []).join('; '),
+      (f.colors || []).join('; '),
+      new Date(f.createdAt).toISOString()
+    ]);
+
+    const csvData = generateCSV(headers, rows);
+    res.header('Content-Type', 'text/csv');
+    res.attachment('products.csv');
+    return res.send(csvData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error exporting frames' });
   }
 });
 

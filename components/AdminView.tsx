@@ -6,6 +6,7 @@ import { orders } from '../data';
 import useProductStore from '../store/productStore';
 import useOrderStore from '../store/orderStore';
 import { AdminView as AdminViewType, Order, Product } from '../types';
+import { downloadBlob } from './utils/downloadCSV';
 
 interface AdminViewProps { view: AdminViewType; setView: (view: AdminViewType) => void; toast: (message: string, tone?: 'success' | 'info' | 'warning') => void; }
 
@@ -37,7 +38,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ view, setView, toast }) =>
     return [];
   }, [user, hasPermission]);
 
-  return <div className="min-h-screen bg-base-200 flex"><aside className="hidden lg:flex w-64 flex-col bg-base-100 border-r border-base-300 p-4 sticky top-0 h-screen"><div className="px-3 py-3 mb-5"><div className="font-black text-xl">nayan<span className="text-primary">.</span></div><p className="text-[10px] uppercase tracking-[.2em] text-base-content/50">Optical studio console</p></div><p className="text-[10px] uppercase tracking-[.18em] text-base-content/40 px-3 mb-2">Workspace</p><ul className="menu p-0 gap-1">{allowedNav.map((item) => <li key={item.id}><button className={view === item.id ? 'active' : ''} onClick={() => setView(item.id)}>{item.icon}{item.label}{item.id === 'lens' && <span className="badge badge-warning badge-xs ml-auto">3</span>}</button></li>)}</ul><div className="mt-auto card bg-primary text-primary-content"><div className="card-body p-4"><p className="text-xs opacity-75">Monday, 17 Jun</p><p className="font-semibold">Store health</p><progress className="progress progress-secondary mt-2" value={82} max={100} /><p className="text-xs opacity-75">82% on track</p><button className="btn btn-sm btn-ghost mt-2" onClick={() => useAuthStore.getState().logout()}>Logout</button></div></div></aside><main className="flex-1 min-w-0"><div className="navbar bg-base-100 border-b border-base-300 sticky top-0 z-20 px-4 md:px-8"><div className="flex-1"><div className="lg:hidden font-black text-xl mr-4">nayan<span className="text-primary">.</span></div><label className="input input-bordered input-sm flex items-center gap-2 max-w-sm w-full"><Search size={15} className="opacity-60" /><input className="grow" placeholder="Search console…" /></label></div><button className="btn btn-ghost btn-circle btn-sm" onClick={() => toast('You are all caught up — no new alerts', 'info')}><Bell size={17} /></button><button className="btn btn-ghost btn-circle btn-sm" onClick={() => toast('Console settings are already up to date', 'info')}><Settings2 size={17} /></button><div className="avatar placeholder ml-2"><div className="bg-secondary text-secondary-content rounded-full w-8"><span className="text-xs">{user?.name?.charAt(0).toUpperCase() || 'A'}</span></div></div></div><div className="lg:hidden tabs tabs-boxed rounded-none bg-base-100 border-b border-base-300 px-3 overflow-x-auto">{allowedNav.map((item) => <button key={item.id} className={`tab whitespace-nowrap ${view === item.id ? 'tab-active' : ''}`} onClick={() => setView(item.id)}>{item.label}</button>)}</div><div className="p-4 md:p-8 max-w-7xl">{view === 'overview' && <Overview setView={setView} toast={toast} />}{view === 'products' && <ProductsAdmin toast={toast} />}{view === 'orders' && <OrdersAdmin toast={toast} />}{view === 'customers' && <CustomersAdmin />}{view === 'lens' && <LensAdmin toast={toast} />}{view === 'analytics' && <Analytics />}{view === 'suppliers' && <Suppliers toast={toast} />}{view === 'reports' && <Reports toast={toast} />}{view === 'staff' && <StaffAdmin toast={toast} />}</div></main></div>;
+  return <div className="min-h-screen bg-base-200 flex"><aside className="hidden lg:flex w-64 flex-col bg-base-100 border-r border-base-300 p-4 sticky top-0 h-screen"><div className="px-3 py-3 mb-5"><div className="font-black text-xl">nayan<span className="text-primary">.</span></div><p className="text-[10px] uppercase tracking-[.2em] text-base-content/50">Optical studio console</p></div><p className="text-[10px] uppercase tracking-[.18em] text-base-content/40 px-3 mb-2">Workspace</p><ul className="menu p-0 gap-1">{allowedNav.map((item) => <li key={item.id}><button className={view === item.id ? 'active' : ''} onClick={() => setView(item.id)}>{item.icon}{item.label}{item.id === 'lens' && <span className="badge badge-warning badge-xs ml-auto">3</span>}</button></li>)}</ul><div className="mt-auto card bg-primary text-primary-content"><div className="card-body p-4"><p className="text-xs opacity-75">Monday, 17 Jun</p><p className="font-semibold">Store health</p><progress className="progress progress-secondary mt-2" value={82} max={100} /><p className="text-xs opacity-75">82% on track</p><button className="btn btn-sm btn-ghost mt-2" onClick={() => useAuthStore.getState().logout()}>Logout</button></div></div></aside><main className="flex-1 min-w-0"><div className="navbar bg-base-100 border-b border-base-300 sticky top-0 z-20 px-4 md:px-8"><div className="flex-1"><div className="lg:hidden font-black text-xl mr-4">nayan<span className="text-primary">.</span></div><label className="input input-bordered input-sm flex items-center gap-2 max-w-sm w-full"><Search size={15} className="opacity-60" /><input className="grow" placeholder="Search console…" /></label></div><button className="btn btn-ghost btn-circle btn-sm" onClick={() => toast('You are all caught up — no new alerts', 'info')}><Bell size={17} /></button><button className="btn btn-ghost btn-circle btn-sm" onClick={() => toast('Console settings are already up to date', 'info')}><Settings2 size={17} /></button><div className="avatar placeholder ml-2"><div className="bg-secondary text-secondary-content rounded-full w-8"><span className="text-xs">{user?.name?.charAt(0).toUpperCase() || 'A'}</span></div></div></div><div className="lg:hidden tabs tabs-boxed rounded-none bg-base-100 border-b border-base-300 px-3 overflow-x-auto">{allowedNav.map((item) => <button key={item.id} className={`tab whitespace-nowrap ${view === item.id ? 'tab-active' : ''}`} onClick={() => setView(item.id)}>{item.label}</button>)}</div><div className="p-4 md:p-8 max-w-7xl">{view === 'overview' && <Overview setView={setView} toast={toast} />}{view === 'products' && <ProductsAdmin toast={toast} />}{view === 'orders' && <OrdersAdmin toast={toast} />}{view === 'customers' && <CustomersAdmin toast={toast} />}{view === 'lens' && <LensAdmin toast={toast} />}{view === 'analytics' && <Analytics toast={toast} />}{view === 'suppliers' && <Suppliers toast={toast} />}{view === 'reports' && <Reports toast={toast} />}{view === 'staff' && <StaffAdmin toast={toast} />}</div></main></div>;
 };
 
 const AdminHeading: React.FC<{ eyebrow: string; title: string; action?: React.ReactNode }> = ({ eyebrow, title, action }) => <div className="flex flex-wrap items-end justify-between gap-3 mb-6"><div><p className="text-xs uppercase tracking-[.2em] text-primary font-semibold">{eyebrow}</p><h1 className="text-3xl font-black mt-1">{title}</h1></div>{action}</div>;
@@ -54,6 +55,25 @@ const ProductsAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
   const [category, setCategory] = useState('All categories');
   const [showAdd, setShowAdd] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      const res = await axios.get(`http://localhost:5000/api/frames/export`, {
+        params: { search, category },
+        headers: { Authorization: `Bearer ${useAuthStore.getState().token}` },
+        responseType: 'blob'
+      });
+      downloadBlob(res.data, 'products.csv');
+      toast?.('Products exported successfully', 'success');
+    } catch (err) {
+      console.error(err);
+      toast?.('Failed to export products', 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     const delay = setTimeout(() => {
@@ -104,8 +124,8 @@ const ProductsAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
                 <option>Kids</option>
                 <option>Premium</option>
               </select>
-              <button className="btn btn-ghost btn-sm" onClick={() => toast('Exporting products as CSV...', 'info')}>
-                <Download size={15} /> Export
+              <button className="btn btn-ghost btn-sm" onClick={handleExport} disabled={isExporting}>
+                <Download size={15} /> {isExporting ? 'Exporting...' : 'Export'}
               </button>
             </div>
           </div>
@@ -448,6 +468,30 @@ const OrdersAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
   const [activeTab, setActiveTab] = useState('All orders');
   const [search, setSearch] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      let statusTab = undefined;
+      if (activeTab === 'Processing') statusTab = 'Processing';
+      if (activeTab === 'Ready') statusTab = 'Ready';
+      if (activeTab === 'Returns') statusTab = 'Returns';
+
+      const res = await axios.get(`http://localhost:5000/api/orders/export`, {
+        params: { search, tab: statusTab },
+        headers: { Authorization: `Bearer ${useAuthStore.getState().token}` },
+        responseType: 'blob'
+      });
+      downloadBlob(res.data, 'orders.csv');
+      toast?.('Orders exported successfully', 'success');
+    } catch (err) {
+      console.error(err);
+      toast?.('Failed to export orders', 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     let statusTab = undefined;
@@ -470,7 +514,7 @@ const OrdersAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
 
   return (
     <>
-      <AdminHeading eyebrow="Fulfilment" title="Orders" action={<button className="btn btn-outline" onClick={() => toast('Order list exported', 'success')}><Download size={16} /> Export</button>} />
+      <AdminHeading eyebrow="Fulfilment" title="Orders" action={<button className="btn btn-outline" onClick={handleExport} disabled={isExporting}><Download size={16} /> {isExporting ? 'Exporting...' : 'Export'}</button>} />
       <div className="stats stats-vertical sm:stats-horizontal shadow bg-base-100 w-full mb-5">
         <div className="stat"><div className="stat-title">To fulfil</div><div className="stat-value text-primary">{counts.toFulfil}</div><div className="stat-desc">Processing required</div></div>
         <div className="stat"><div className="stat-title">Ready to ship</div><div className="stat-value">{counts.ready}</div><div className="stat-desc">Packed & ready</div></div>
@@ -1109,7 +1153,7 @@ const CustomerDetailDrawer = ({ id, onClose }: { id: string, onClose: () => void
   );
 };
 
-const CustomersAdmin: React.FC = () => {
+const CustomersAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
   const [customers, setCustomers] = useState<any[]>([]);
   const [stats, setStats] = useState({ totalCustomers: '-', repeatRate: '-', prescriptionsSaved: '-' });
   const [search, setSearch] = useState('');
@@ -1117,6 +1161,25 @@ const CustomersAdmin: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { token } = useAuthStore();
   const [debounceTimeout, setDebounceTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      const res = await axios.get(`http://localhost:5000/api/customers/export`, {
+        params: { search },
+        headers: { Authorization: `Bearer ${useAuthStore.getState().token}` },
+        responseType: 'blob'
+      });
+      downloadBlob(res.data, 'customers.csv');
+      toast?.('Customers exported successfully', 'success');
+    } catch (err) {
+      console.error(err);
+      toast?.('Failed to export customers', 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const fetchCustomers = (q = '') => {
     setLoading(true);
@@ -1146,11 +1209,16 @@ const CustomersAdmin: React.FC = () => {
         eyebrow="Relationships" 
         title="Customers" 
         action={
-          <label className="input input-bordered flex items-center gap-2 input-sm w-64">
-            <Search size={15} className="opacity-60" />
-            <input className="grow" placeholder="Search customers…" value={search} onChange={handleSearch} />
-          </label>
-        } 
+          <div className="flex gap-2">
+            <label className="input input-bordered flex items-center gap-2 input-sm w-64">
+              <Search size={15} className="opacity-60" />
+              <input className="grow" placeholder="Search customers…" value={search} onChange={handleSearch} />
+            </label>
+            <button className="btn btn-outline btn-sm" onClick={handleExport} disabled={isExporting}>
+              <Download size={15} /> {isExporting ? 'Exporting...' : 'Export'}
+            </button>
+          </div>
+        }  
       />
       <div className="grid md:grid-cols-3 gap-3 mb-5">
         <Kpi label="Total customers" value={stats.totalCustomers as any} delta="vs last week" icon={<Users />} />
@@ -1254,21 +1322,21 @@ const LensAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
     }
   };
 
+  const [isExporting, setIsExporting] = useState(false);
+
   const handleExport = async () => {
     try {
+      setIsExporting(true);
       const res = await axios.get('http://localhost:5000/api/inventory/lenses/export', { 
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'lens_inventory.csv');
-      document.body.appendChild(link);
-      link.click();
+      downloadBlob(res.data, 'lens_inventory.csv');
       toast?.('Inventory exported', 'success');
     } catch (err) {
       toast?.('Failed to export', 'error');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -1396,7 +1464,7 @@ const LensAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
               <h2 className="font-bold">Lens inventory</h2>
               <p className="text-xs text-base-content/60">Updated just now</p>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={handleExport}><Download size={15} /> Export</button>
+            <button className="btn btn-ghost btn-sm" onClick={handleExport} disabled={isExporting}><Download size={15} /> {isExporting ? 'Exporting...' : 'Export'}</button>
           </div>
           
           <div className="overflow-x-auto mt-3">
@@ -1661,11 +1729,30 @@ const LensAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
   );
 };
 
-const Analytics: React.FC = () => { 
+const Analytics: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => { 
   const [period, setPeriod] = useState('7 days'); 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const { token } = useAuthStore();
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      const res = await axios.get(`http://localhost:5000/api/analytics/search/export`, {
+        params: { range: period },
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      });
+      downloadBlob(res.data, `search-analytics-${period.replace(' ', '')}.csv`);
+      toast?.('Analytics exported successfully', 'success');
+    } catch (err) {
+      console.error(err);
+      toast?.('Failed to export analytics', 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
   
   useEffect(() => {
     setLoading(true);
@@ -1680,8 +1767,12 @@ const Analytics: React.FC = () => {
     const pct = ((curr - prev) / prev) * 100;
     return `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
   };
-
-  return <><AdminHeading eyebrow="Discovery" title="Search analytics" action={<select className="select select-bordered select-sm" value={period} onChange={(e) => setPeriod(e.target.value)}><option>7 days</option><option>30 days</option><option>90 days</option></select>} />
+  return <><AdminHeading eyebrow="Discovery" title="Search analytics" action={
+    <div className="flex gap-2">
+      <select className="select select-bordered select-sm" value={period} onChange={(e) => setPeriod(e.target.value)}><option>7 days</option><option>30 days</option><option>90 days</option></select>
+      <button className="btn btn-outline btn-sm" onClick={handleExport} disabled={isExporting}><Download size={15} /> {isExporting ? 'Exporting...' : 'Export'}</button>
+    </div>
+  } />
     {loading ? <div className="flex justify-center p-12"><span className="loading loading-spinner text-primary"></span></div> : !data ? <div className="text-center p-12">Failed to load analytics</div> : (
       <>
         <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -1734,7 +1825,63 @@ const Analytics: React.FC = () => {
 
 const Suppliers: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => <><AdminHeading eyebrow="Partners" title="Suppliers" action={<button className="btn btn-primary" onClick={() => toast('Supplier invite link copied', 'success')}><Plus size={16} /> Add supplier</button>} /><div className="grid md:grid-cols-3 gap-3">{[['OptiLens India', 'Lenses · 1.6 index', '98% on-time', 'Healthy'], ['FrameCraft Works', 'Frames · Private label', '94% on-time', 'Healthy'], ['Sunmark Labs', 'Sun lenses · Polarised', '89% on-time', 'Review due']].map(([name, speciality, metric, status]) => <div className="card bg-base-100 border border-base-300" key={name}><div className="card-body"><div className="flex justify-between"><div className="p-3 rounded-xl bg-secondary/15 text-secondary"><Store size={20} /></div><span className={`badge badge-sm ${status === 'Healthy' ? 'badge-success' : 'badge-warning'}`}>{status}</span></div><h2 className="card-title mt-2">{name}</h2><p className="text-sm text-base-content/60">{speciality}</p><div className="divider my-2" /><p className="text-sm">{metric}</p><button className="btn btn-ghost btn-sm mt-2 justify-between">View supplier <ChevronRight size={15} /></button></div></div>)}</div></>;
 
-const Reports: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => <><AdminHeading eyebrow="Insights" title="Reports" action={<button className="btn btn-primary" onClick={() => toast('All reports exported', 'success')}><Download size={16} /> Export all</button>} /><div className="grid md:grid-cols-2 gap-4">{[['Sales & margin', 'Revenue, discounts, GST and contribution margin', 'Updated today'], ['Product performance', 'Sell-through, returns and frame-level demand', 'Updated yesterday'], ['Lens inventory', 'Valuation, reorder history and ageing', 'Updated 4 min ago'], ['Customer cohorts', 'Repeat rate, LTV and acquisition channels', 'Updated 12 Jun']].map(([title, desc, date]) => <div className="card bg-base-100 border border-base-300" key={title}><div className="card-body flex-row items-start gap-4"><div className="p-3 bg-primary/15 text-primary rounded-xl"><FileText size={20} /></div><div className="flex-1"><h2 className="font-bold">{title}</h2><p className="text-sm text-base-content/60 mt-1">{desc}</p><p className="text-xs text-base-content/50 mt-3">{date}</p></div><button className="btn btn-ghost btn-circle btn-sm" onClick={() => toast(`${title} downloaded as CSV`, 'success')}><Download size={15} /></button></div></div>)}</div></>;
+const Reports: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
+  const [isExporting, setIsExporting] = useState<string | null>(null);
+
+  const handleExport = async (type: string, filename: string) => {
+    try {
+      setIsExporting(type);
+      const res = await axios.get(`http://localhost:5000/api/reports/export?type=${type}`, {
+        headers: { Authorization: `Bearer ${useAuthStore.getState().token}` },
+        responseType: 'blob'
+      });
+      downloadBlob(res.data, filename);
+      toast?.('Report downloaded', 'success');
+    } catch (err) {
+      console.error(err);
+      toast?.('Failed to download report', 'error');
+    } finally {
+      setIsExporting(null);
+    }
+  };
+
+  const handleExportAll = async () => {
+    await handleExport('sales', 'sales_report.csv');
+    await handleExport('products', 'products_report.csv');
+    await handleExport('lens', 'lens_report.csv');
+    await handleExport('customers', 'customers_report.csv');
+  };
+
+  const reportsList = [
+    ['Sales & margin', 'Revenue, discounts, GST and contribution margin', 'Updated today', 'sales'], 
+    ['Product performance', 'Sell-through, returns and frame-level demand', 'Updated yesterday', 'products'], 
+    ['Lens inventory', 'Valuation, reorder history and ageing', 'Updated just now', 'lens'], 
+    ['Customer cohorts', 'Repeat rate, LTV and acquisition channels', 'Updated 12 Jun', 'customers']
+  ];
+
+  return (
+    <>
+      <AdminHeading eyebrow="Insights" title="Reports" action={<button className="btn btn-primary" onClick={handleExportAll} disabled={!!isExporting}><Download size={16} /> Export all</button>} />
+      <div className="grid md:grid-cols-2 gap-4">
+        {reportsList.map(([title, desc, date, type]) => (
+          <div className="card bg-base-100 border border-base-300" key={title}>
+            <div className="card-body flex-row items-start gap-4">
+              <div className="p-3 bg-primary/15 text-primary rounded-xl"><FileText size={20} /></div>
+              <div className="flex-1">
+                <h2 className="font-bold">{title}</h2>
+                <p className="text-sm text-base-content/60 mt-1">{desc}</p>
+                <p className="text-xs text-base-content/50 mt-3">{date}</p>
+              </div>
+              <button className="btn btn-ghost btn-circle btn-sm" onClick={() => handleExport(type, `${type}_report.csv`)} disabled={isExporting === type}>
+                {isExporting === type ? <span className="loading loading-spinner loading-xs"></span> : <Download size={15} />}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+};
 
 const StaffAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => {
   const [staffList, setStaffList] = useState<any[]>([]);

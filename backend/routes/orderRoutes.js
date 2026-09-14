@@ -6,6 +6,7 @@ const Frame = require('../models/Frame');
 const User = require('../models/User');
 const PaymentTransaction = require('../models/PaymentTransaction');
 const { requireAuth, requireRole, requirePermission } = require('../middleware/authMiddleware');
+const { generateCSV } = require('../utils/csvExport');
 
 // @route   GET /api/orders
 // @desc    Get all orders (Customer gets own, Admin/Staff gets all based on permissions)
@@ -75,6 +76,77 @@ router.get('/', requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error fetching orders' });
+  }
+});
+
+// @route   GET /api/orders/export
+// @desc    Export orders to CSV
+// @access  Protected (orders.view)
+router.get('/export', requireAuth, requirePermission('orders.view'), async (req, res) => {
+  try {
+    const { search, status, tab } = req.query;
+    
+    let query = {};
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      query.$or = [
+        { orderNumber: searchRegex },
+        { customerName: searchRegex },
+        { customerEmail: searchRegex },
+        { customerMobile: searchRegex }
+      ];
+    }
+
+    if (status) {
+      query.orderStatus = status;
+    } else if (tab) {
+      if (tab === 'Processing') query.orderStatus = 'PROCESSING';
+      if (tab === 'Ready') query.orderStatus = { $in: ['PACKED', 'READY_FOR_PICKUP'] };
+      if (tab === 'Returns') query.orderStatus = { $in: ['RETURN_REQUESTED', 'RETURN_APPROVED', 'RETURN_RECEIVED', 'REFUND_PENDING', 'RETURN_PICKED_UP'] };
+    }
+
+    const orders = await Order.find(query).sort({ createdAt: -1 });
+
+    const headers = [
+      'Order Number', 'Customer Name', 'Customer Email', 'Customer Mobile', 
+      'Order Date', 'Items', 'Subtotal', 'Discount', 'Tax', 'Shipping', 
+      'Total Amount', 'Amount Paid', 'Outstanding Amount', 'Payment Status', 
+      'Order Status', 'Shipping Address', 'Billing Address', 'Created At'
+    ];
+    
+    const rows = orders.map(o => {
+      const itemsStr = (o.items || []).map(i => `${i.quantity}x ${i.productName}`).join('; ');
+      const formatAddress = (addr) => addr ? `${addr.street || ''}, ${addr.city || ''}, ${addr.state || ''} ${addr.zipCode || ''}` : '';
+      
+      return [
+        o.orderNumber,
+        o.customerName,
+        o.customerEmail,
+        o.customerMobile,
+        new Date(o.orderDate || o.createdAt).toISOString(),
+        itemsStr,
+        o.subtotal || 0,
+        o.discount || 0,
+        o.tax || 0,
+        o.shipping || 0,
+        o.totalAmount || 0,
+        o.amountPaid || 0,
+        o.outstanding || 0,
+        o.paymentStatus,
+        o.orderStatus,
+        formatAddress(o.shippingAddress),
+        formatAddress(o.billingAddress),
+        new Date(o.createdAt).toISOString()
+      ];
+    });
+
+    const csvData = generateCSV(headers, rows);
+    res.header('Content-Type', 'text/csv');
+    res.attachment('orders.csv');
+    return res.send(csvData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error exporting orders' });
   }
 });
 
