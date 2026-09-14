@@ -181,6 +181,25 @@ const CartModal: React.FC<{ cart: CartLine[]; total: number; discount: number; p
   const [loading, setLoading] = useState(false);
   const { createOrder } = useOrderStore();
   const [confirmedOrderId, setConfirmedOrderId] = useState('');
+  const [outstanding, setOutstanding] = useState(0);
+  const [customPayAmount, setCustomPayAmount] = useState('');
+  
+  React.useEffect(() => {
+    // Fetch user's latest outstanding balance
+    const fetchMe = async () => {
+      try {
+        const token = useAuthStore.getState().token;
+        if (!token) return;
+        const res = await axios.get('http://localhost:5000/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+        setOutstanding(res.data.outstandingBalance || 0);
+      } catch (e) {
+        console.error('Failed to fetch outstanding', e);
+      }
+    };
+    fetchMe();
+  }, []);
+
+  const totalPayable = payable + outstanding;
 
   const handleCheckout = async () => {
     setLoading(true);
@@ -189,7 +208,8 @@ const CartModal: React.FC<{ cart: CartLine[]; total: number; discount: number; p
       const orderData = {
         items,
         shippingAddress: address === 'home' ? { street: '12, Palm Grove', city: 'Mumbai', state: 'MH', zipCode: '400050' } : { street: 'Bandra Studio', city: 'Mumbai', state: 'MH', zipCode: '400050' },
-        notes: coupon ? `Coupon: ${coupon}` : ''
+        notes: coupon ? `Coupon: ${coupon}` : '',
+        amountPaid: customPayAmount ? Number(customPayAmount) : totalPayable
       };
       const result = await createOrder(orderData);
       setConfirmedOrderId(result.orderNumber);
@@ -251,11 +271,29 @@ const CartModal: React.FC<{ cart: CartLine[]; total: number; discount: number; p
             <div className="flex justify-between"><span>Subtotal</span><span>₹{total.toLocaleString('en-IN')}</span></div>
             <div className="flex justify-between text-success"><span>Welcome saving</span><span>-₹{discount.toLocaleString('en-IN')}</span></div>
             <div className="flex justify-between"><span>GST (included)</span><span>₹{Math.round(payable * .18).toLocaleString('en-IN')}</span></div>
-            <div className="flex justify-between font-black text-base border-t border-base-300 pt-2"><span>Total</span><span>₹{payable.toLocaleString('en-IN')}</span></div>
+            <div className="flex justify-between font-bold border-t border-base-300 pt-2"><span>Current Order Total</span><span>₹{payable.toLocaleString('en-IN')}</span></div>
+            {outstanding > 0 && (
+              <div className="flex justify-between text-error font-medium"><span>Previous Outstanding</span><span>₹{outstanding.toLocaleString('en-IN')}</span></div>
+            )}
+            <div className="flex justify-between font-black text-base border-t border-base-300 pt-2"><span>Total Payable</span><span>₹{totalPayable.toLocaleString('en-IN')}</span></div>
           </div>
+          
+          <div className="mt-4 form-control">
+             <label className="label text-xs font-semibold">Payment Amount (₹)</label>
+             <input 
+               type="number" 
+               className="input input-bordered w-full" 
+               placeholder={`₹${totalPayable.toLocaleString('en-IN')}`}
+               value={customPayAmount}
+               onChange={e => setCustomPayAmount(e.target.value)}
+               max={totalPayable}
+             />
+             <p className="text-xs text-base-content/60 mt-1">Leave empty to pay full amount.</p>
+          </div>
+
           <button className="btn btn-primary w-full mt-4" onClick={handleCheckout} disabled={loading || cart.length === 0}>
             {loading ? <span className="loading loading-spinner loading-sm mr-2"></span> : <CreditCard size={17} className="mr-2" />}
-            {loading ? 'Placing order...' : `Confirm checkout · ₹${payable.toLocaleString('en-IN')}`}
+            {loading ? 'Placing order...' : `Confirm checkout · ₹${customPayAmount ? Number(customPayAmount).toLocaleString('en-IN') : totalPayable.toLocaleString('en-IN')}`}
           </button>
         </>
       )}

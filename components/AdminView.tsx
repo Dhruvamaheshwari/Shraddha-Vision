@@ -713,7 +713,488 @@ const OrderDetailsModal: React.FC<{ orderId: string; onClose: () => void; toast:
   );
 };
 
-const CustomersAdmin: React.FC = () => <><AdminHeading eyebrow="Relationships" title="Customers" action={<label className="input input-bordered flex items-center gap-2 input-sm w-64"><Search size={15} className="opacity-60" /><input className="grow" placeholder="Search customers…" /></label>} /><div className="grid md:grid-cols-3 gap-3 mb-5"><Kpi label="Total customers" value="8,642" delta="10.1%" icon={<Users />} /><Kpi label="Repeat rate" value="42.8%" delta="3.4%" icon={<ShoppingCart />} tone="secondary" /><Kpi label="Prescriptions saved" value="2,108" delta="14.6%" icon={<FileText />} tone="info" /></div><div className="card bg-base-100 border border-base-300"><div className="card-body p-4"><h2 className="font-bold">Recent customer activity</h2><div className="overflow-x-auto mt-3"><table className="table"><thead><tr><th>Customer</th><th>Last order</th><th>Lifetime value</th><th>Preference</th><th /></tr></thead><tbody>{[['Ananya Rao', 'NYN-2408 · Today', '₹12,480', 'Round · Nayan House'], ['Ritesh Menon', 'NYN-2407 · Yesterday', '₹8,920', 'Rectangle · Blue-cut'], ['Kavya Shah', 'NYN-2406 · 12 Jun', '₹22,410', 'Cat-eye · The Edit'], ['Arjun Mehta', 'NYN-2405 · 11 Jun', '₹4,890', 'Aviator · Suncraft'], ['Sanya Iyer', 'NYN-2404 · 10 Jun', '₹18,200', 'Geometric · Transitions']].map((row) => <tr key={row[0]}><td className="font-semibold">{row[0]}</td><td className="text-sm">{row[1]}</td><td>{row[2]}</td><td className="text-sm text-base-content/60">{row[3]}</td><td><button className="btn btn-ghost btn-xs"><ChevronRight size={15} /></button></td></tr>)}</tbody></table></div></div></div></>;
+const CustomerDetailDrawer = ({ id, onClose }: { id: string, onClose: () => void }) => {
+  const [customer, setCustomer] = useState<any>(null);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [prescriptions, setPrescriptions] = useState<any[]>([]);
+  const [activity, setActivity] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { token } = useAuthStore();
+  const [tab, setTab] = useState('PROFILE');
+
+  // Record payment form state
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [payAmount, setPayAmount] = useState('');
+  const [payMethod, setPayMethod] = useState('Cash');
+  const [payNotes, setPayNotes] = useState('');
+  const [recordingPayment, setRecordingPayment] = useState(false);
+
+  // Rx form state
+  const [showRxForm, setShowRxForm] = useState(false);
+  const [editingRxId, setEditingRxId] = useState<string | null>(null);
+  const [rxForm, setRxForm] = useState({
+    od: { sph: '', cyl: '', axis: '' },
+    os: { sph: '', cyl: '', axis: '' },
+    pd: '', add: '', notes: ''
+  });
+  const [savingRx, setSavingRx] = useState(false);
+
+  const fetchData = () => {
+    setLoading(true);
+    Promise.all([
+      axios.get(`http://localhost:5000/api/customers/${id}`, { headers: { Authorization: `Bearer ${token}` } }),
+      axios.get(`http://localhost:5000/api/customers/${id}/orders`, { headers: { Authorization: `Bearer ${token}` } }),
+      axios.get(`http://localhost:5000/api/customers/${id}/prescriptions`, { headers: { Authorization: `Bearer ${token}` } }),
+      axios.get(`http://localhost:5000/api/customers/${id}/activity`, { headers: { Authorization: `Bearer ${token}` } }),
+      axios.get(`http://localhost:5000/api/customers/${id}/payments`, { headers: { Authorization: `Bearer ${token}` } }),
+    ]).then(([resC, resO, resP, resA, resPay]) => {
+      setCustomer(resC.data);
+      setOrders(resO.data);
+      setPrescriptions(resP.data);
+      setActivity(resA.data);
+      setPayments(resPay.data);
+    }).catch(console.error).finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [id, token]);
+
+  const handleSaveRx = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingRx(true);
+    try {
+      if (editingRxId) {
+        await axios.put(`http://localhost:5000/api/customers/${id}/prescriptions/${editingRxId}`, rxForm, { headers: { Authorization: `Bearer ${token}` } });
+      } else {
+        await axios.post(`http://localhost:5000/api/customers/${id}/prescriptions`, rxForm, { headers: { Authorization: `Bearer ${token}` } });
+      }
+      setShowRxForm(false);
+      setEditingRxId(null);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save prescription');
+    } finally {
+      setSavingRx(false);
+    }
+  };
+
+  const openEditRx = (rx: any) => {
+    setEditingRxId(rx._id);
+    setRxForm({
+      od: { sph: rx.od?.sph || '', cyl: rx.od?.cyl || '', axis: rx.od?.axis || '' },
+      os: { sph: rx.os?.sph || '', cyl: rx.os?.cyl || '', axis: rx.os?.axis || '' },
+      pd: rx.pd || '', add: rx.add || '', notes: rx.notes || ''
+    });
+    setShowRxForm(true);
+  };
+  
+  const openNewRx = () => {
+    setEditingRxId(null);
+    setRxForm({
+      od: { sph: '', cyl: '', axis: '' },
+      os: { sph: '', cyl: '', axis: '' },
+      pd: '', add: '', notes: ''
+    });
+    setShowRxForm(true);
+  };
+
+  const handleRecordPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payAmount || isNaN(Number(payAmount))) return;
+    setRecordingPayment(true);
+    try {
+      await axios.post(`http://localhost:5000/api/customers/${id}/payments`, {
+        amount: Number(payAmount),
+        paymentMethod: payMethod,
+        notes: payNotes,
+        type: 'PAYMENT'
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      setShowPaymentForm(false);
+      setPayAmount('');
+      setPayNotes('');
+      fetchData(); // Refresh all data to update balance and ledger
+    } catch (err) {
+      console.error(err);
+      alert('Failed to record payment');
+    } finally {
+      setRecordingPayment(false);
+    }
+  };
+
+  const totalOrders = orders.length;
+  const lifetimeValue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+  const avgOrderValue = totalOrders > 0 ? Math.round(lifetimeValue / totalOrders) : 0;
+  const pendingOrders = orders.filter(o => ['PENDING', 'PROCESSING', 'PACKED'].includes(o.orderStatus)).length;
+  const deliveredOrders = orders.filter(o => o.orderStatus === 'DELIVERED').length;
+  
+  const totalPaid = payments.filter(p => p.type === 'PAYMENT' || p.type === 'PURCHASE').reduce((sum, p) => p.type === 'PAYMENT' ? sum + p.amount : sum + (p.amountPaid || 0), 0);
+  const totalRefunds = payments.filter(p => p.type === 'REFUND').reduce((sum, p) => sum + p.amount, 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-2xl bg-base-100 h-[90vh] rounded-2xl shadow-xl flex flex-col animate-in zoom-in-95 duration-200">
+        <div className="p-4 border-b border-base-300 flex justify-between items-center bg-base-100 rounded-t-2xl sticky top-0 z-10">
+          <div>
+            <h2 className="font-bold text-lg">{customer?.name || 'Customer Details'}</h2>
+            <p className="text-xs text-base-content/60">{customer?._id}</p>
+          </div>
+          <button className="btn btn-ghost btn-circle btn-sm" onClick={onClose}><X size={18} /></button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-4">
+          {loading ? (
+            <div className="flex justify-center p-8"><span className="loading loading-spinner loading-lg text-primary" /></div>
+          ) : !customer ? (
+            <div className="text-center p-8 text-error">Failed to load customer</div>
+          ) : (
+            <div className="space-y-6">
+              <div className="tabs tabs-boxed">
+                <button className={`tab ${tab==='PROFILE'?'tab-active':''}`} onClick={()=>setTab('PROFILE')}>Profile</button>
+                <button className={`tab ${tab==='ORDERS'?'tab-active':''}`} onClick={()=>setTab('ORDERS')}>Orders</button>
+                <button className={`tab ${tab==='PRESCRIPTION'?'tab-active':''}`} onClick={()=>setTab('PRESCRIPTION')}>Rx</button>
+                <button className={`tab ${tab==='PAYMENTS'?'tab-active':''}`} onClick={()=>setTab('PAYMENTS')}>Payments</button>
+                <button className={`tab ${tab==='ACTIVITY'?'tab-active':''}`} onClick={()=>setTab('ACTIVITY')}>Activity</button>
+              </div>
+
+              {tab === 'PROFILE' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-base-200 p-4 rounded-xl overflow-hidden">
+                      <p className="text-xs text-base-content/60">Contact</p>
+                      <p className="font-medium mt-1 truncate" title={customer.email}>{customer.email}</p>
+                      <p className="font-medium truncate">{customer.mobileNumber || '—'}</p>
+                    </div>
+                    <div className={`p-4 rounded-xl overflow-hidden border-2 ${customer.outstandingBalance > 0 ? 'border-error/30 bg-error/5' : 'bg-base-200 border-transparent'}`}>
+                      <p className="text-xs text-base-content/60">Outstanding Balance</p>
+                      <p className={`text-2xl font-bold mt-1 ${customer.outstandingBalance > 0 ? 'text-error' : 'text-success'}`}>
+                        {customer.outstandingBalance > 0 ? `₹${customer.outstandingBalance.toLocaleString('en-IN')}` : 'No outstanding balance'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="bg-base-200 p-4 rounded-xl">
+                    <p className="text-xs text-base-content/60 mb-2">Lifetime Value summary</p>
+                    <div className="grid grid-cols-2 gap-y-2">
+                      <span className="text-sm">Total orders:</span><span className="text-sm font-medium">{totalOrders}</span>
+                      <span className="text-sm">Lifetime spend:</span><span className="text-sm font-medium">₹{lifetimeValue.toLocaleString('en-IN')}</span>
+                      <span className="text-sm">Avg order value:</span><span className="text-sm font-medium">₹{avgOrderValue.toLocaleString('en-IN')}</span>
+                      <span className="text-sm">Pending:</span><span className="text-sm font-medium">{pendingOrders}</span>
+                      <span className="text-sm">Delivered:</span><span className="text-sm font-medium">{deliveredOrders}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {tab === 'ORDERS' && (
+                <div className="space-y-3">
+                  {orders.length === 0 ? <p className="text-center text-sm text-base-content/60 py-4">No orders found.</p> : 
+                    orders.map(o => (
+                      <div key={o._id} className="card bg-base-200 border border-base-300">
+                        <div className="card-body p-4">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-semibold text-sm">{o.orderNumber}</span>
+                            <span className="badge badge-sm badge-outline">{o.orderStatus}</span>
+                          </div>
+                          <p className="text-xs text-base-content/60">{new Date(o.createdAt).toLocaleDateString()} · ₹{o.totalAmount.toLocaleString('en-IN')}</p>
+                          <div className="flex justify-between items-center mt-1">
+                            <span className="text-xs">Payment: <span className={o.outstanding > 0 ? 'text-error font-medium' : 'text-success font-medium'}>{o.paymentStatus}</span></span>
+                            {o.outstanding > 0 && <span className="text-xs text-error">Due: ₹{o.outstanding.toLocaleString('en-IN')}</span>}
+                          </div>
+                          <div className="text-xs mt-2 truncate">
+                            {o.items.map((i:any) => `${i.quantity}x ${i.productName}`).join(', ')}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+
+              {tab === 'PRESCRIPTION' && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-semibold text-sm">Prescriptions</h3>
+                    <button className="btn btn-sm btn-primary" onClick={() => showRxForm ? setShowRxForm(false) : openNewRx()}>
+                      {showRxForm ? 'Cancel' : 'Add Prescription'}
+                    </button>
+                  </div>
+                  
+                  {showRxForm && (
+                    <form onSubmit={handleSaveRx} className="bg-base-200 p-4 rounded-xl space-y-3 border border-primary/30">
+                      <div className="text-sm font-semibold mb-2">{editingRxId ? 'Edit Prescription' : 'New Prescription'}</div>
+                      <table className="table table-xs w-full">
+                        <thead>
+                          <tr>
+                            <th></th><th>SPH</th><th>CYL</th><th>AXIS</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <th>OD (R)</th>
+                            <td><input className="input input-bordered input-xs w-full" value={rxForm.od.sph} onChange={e => setRxForm({...rxForm, od: {...rxForm.od, sph: e.target.value}})} /></td>
+                            <td><input className="input input-bordered input-xs w-full" value={rxForm.od.cyl} onChange={e => setRxForm({...rxForm, od: {...rxForm.od, cyl: e.target.value}})} /></td>
+                            <td><input className="input input-bordered input-xs w-full" value={rxForm.od.axis} onChange={e => setRxForm({...rxForm, od: {...rxForm.od, axis: e.target.value}})} /></td>
+                          </tr>
+                          <tr>
+                            <th>OS (L)</th>
+                            <td><input className="input input-bordered input-xs w-full" value={rxForm.os.sph} onChange={e => setRxForm({...rxForm, os: {...rxForm.os, sph: e.target.value}})} /></td>
+                            <td><input className="input input-bordered input-xs w-full" value={rxForm.os.cyl} onChange={e => setRxForm({...rxForm, os: {...rxForm.os, cyl: e.target.value}})} /></td>
+                            <td><input className="input input-bordered input-xs w-full" value={rxForm.os.axis} onChange={e => setRxForm({...rxForm, os: {...rxForm.os, axis: e.target.value}})} /></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <div className="grid grid-cols-2 gap-3 mt-2">
+                         <div className="form-control">
+                            <label className="label text-xs py-1">PD</label>
+                            <input className="input input-bordered input-sm" value={rxForm.pd} onChange={e => setRxForm({...rxForm, pd: e.target.value})} />
+                         </div>
+                         <div className="form-control">
+                            <label className="label text-xs py-1">ADD</label>
+                            <input className="input input-bordered input-sm" value={rxForm.add} onChange={e => setRxForm({...rxForm, add: e.target.value})} />
+                         </div>
+                      </div>
+                      <div className="form-control">
+                        <label className="label text-xs py-1">Notes</label>
+                        <input className="input input-bordered input-sm" value={rxForm.notes} onChange={e => setRxForm({...rxForm, notes: e.target.value})} />
+                      </div>
+                      <div className="flex justify-end mt-4">
+                        <button type="submit" className="btn btn-sm btn-primary" disabled={savingRx}>
+                          {savingRx ? 'Saving...' : 'Save Prescription'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {!showRxForm && prescriptions.length === 0 ? <p className="text-center text-sm text-base-content/60 py-4">No prescription saved.</p> : 
+                    !showRxForm && prescriptions.map((p, idx) => (
+                      <div key={p._id} className="card bg-base-200 border border-base-300 relative group">
+                        <button className="btn btn-xs btn-outline absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 bg-base-100" onClick={() => openEditRx(p)}>Edit</button>
+                        <div className="card-body p-4">
+                          <div className="flex justify-between items-center mb-3">
+                            <span className="font-semibold text-sm mr-8">{idx === 0 ? 'Current Prescription' : 'Previous Prescription'}</span>
+                            <span className="text-xs text-base-content/60">{new Date(p.date).toLocaleDateString()}</span>
+                          </div>
+                          <table className="table table-xs">
+                            <thead>
+                              <tr>
+                                <th></th>
+                                <th>SPH</th>
+                                <th>CYL</th>
+                                <th>AXIS</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                <th>OD (Right)</th>
+                                <td>{p.od?.sph || '—'}</td>
+                                <td>{p.od?.cyl || '—'}</td>
+                                <td>{p.od?.axis || '—'}</td>
+                              </tr>
+                              <tr>
+                                <th>OS (Left)</th>
+                                <td>{p.os?.sph || '—'}</td>
+                                <td>{p.os?.cyl || '—'}</td>
+                                <td>{p.os?.axis || '—'}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                          <div className="flex gap-4 mt-2 px-2">
+                            <div className="text-xs"><span className="text-base-content/60 mr-1">PD:</span>{p.pd || '—'}</div>
+                            <div className="text-xs"><span className="text-base-content/60 mr-1">ADD:</span>{p.add || '—'}</div>
+                          </div>
+                          {p.notes && <div className="text-xs mt-3 px-2 bg-base-100 p-2 rounded-lg italic">"{p.notes}"</div>}
+                        </div>
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+
+              {tab === 'PAYMENTS' && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-semibold text-sm">Payment History</h3>
+                    <button className="btn btn-sm btn-primary" onClick={() => setShowPaymentForm(!showPaymentForm)}>
+                      {showPaymentForm ? 'Cancel' : 'Record Payment'}
+                    </button>
+                  </div>
+                  
+                  {showPaymentForm && (
+                    <form onSubmit={handleRecordPayment} className="bg-base-200 p-4 rounded-xl space-y-3 border border-primary/30">
+                      <div className="text-sm font-semibold mb-2">Record a Payment</div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="form-control">
+                          <label className="label text-xs">Amount (₹)</label>
+                          <input type="number" className="input input-bordered input-sm" value={payAmount} onChange={e => setPayAmount(e.target.value)} required min="1" />
+                        </div>
+                        <div className="form-control">
+                          <label className="label text-xs">Method</label>
+                          <select className="select select-bordered select-sm" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
+                            <option>Cash</option>
+                            <option>UPI</option>
+                            <option>Card</option>
+                            <option>Bank Transfer</option>
+                            <option>Other</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="form-control">
+                        <label className="label text-xs">Notes (Optional)</label>
+                        <input type="text" className="input input-bordered input-sm" value={payNotes} onChange={e => setPayNotes(e.target.value)} placeholder="E.g., Cleared partial due" />
+                      </div>
+                      <div className="flex justify-end mt-4">
+                        <button type="submit" className="btn btn-sm btn-primary" disabled={recordingPayment || !payAmount}>
+                          {recordingPayment ? 'Saving...' : 'Save Payment'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {payments.length === 0 ? <p className="text-center text-sm text-base-content/60 py-4">No payment history.</p> : 
+                    <div className="space-y-3">
+                      {payments.map(p => (
+                        <div key={p._id} className="card bg-base-200 border border-base-300">
+                          <div className="card-body p-4 flex flex-row items-center justify-between">
+                            <div>
+                              <div className="font-semibold text-sm">
+                                {p.type === 'PURCHASE' ? `Purchase` : p.type === 'PAYMENT' ? 'Payment Received' : p.type}
+                              </div>
+                              <div className="text-xs text-base-content/60 mt-1">
+                                {new Date(p.createdAt).toLocaleDateString()} {p.paymentMethod !== 'Other' && `· ${p.paymentMethod}`}
+                              </div>
+                              {p.notes && <div className="text-xs mt-1 text-base-content/70">{p.notes}</div>}
+                            </div>
+                            <div className="text-right">
+                              <div className={`font-bold ${p.type === 'PURCHASE' ? '' : 'text-success'}`}>
+                                {p.type === 'PURCHASE' ? '' : '+'}₹{p.type === 'PURCHASE' ? p.orderTotal?.toLocaleString('en-IN') : p.amount.toLocaleString('en-IN')}
+                              </div>
+                              {p.type === 'PURCHASE' && p.amountPaid !== undefined && (
+                                <div className="text-xs text-success">Paid: ₹{p.amountPaid.toLocaleString('en-IN')}</div>
+                              )}
+                              <div className="text-xs text-base-content/50 mt-1">
+                                Bal: ₹{p.outstandingAmount.toLocaleString('en-IN')}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  }
+                </div>
+              )}
+
+              {tab === 'ACTIVITY' && (
+                <div className="space-y-4">
+                  {activity.length === 0 ? <p className="text-center text-sm text-base-content/60 py-4">No activity found.</p> : 
+                    <ul className="steps steps-vertical">
+                      {activity.map((a, i) => (
+                        <li key={i} className={`step ${i===0?'step-primary':''}`}>
+                          <div className="text-left ml-2">
+                            <p className="text-sm font-medium">{a.description}</p>
+                            <p className="text-xs text-base-content/60">{new Date(a.date).toLocaleString()}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  }
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CustomersAdmin: React.FC = () => {
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [stats, setStats] = useState({ totalCustomers: '-', repeatRate: '-', prescriptionsSaved: '-' });
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { token } = useAuthStore();
+  const [debounceTimeout, setDebounceTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  const fetchCustomers = (q = '') => {
+    setLoading(true);
+    axios.get(`http://localhost:5000/api/customers?search=${q}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => setCustomers(res.data.customers))
+      .catch(err => console.error(err))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    axios.get('http://localhost:5000/api/customers/stats', { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => setStats(res.data))
+      .catch(console.error);
+    fetchCustomers();
+  }, [token]);
+
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSearch(val);
+    if (debounceTimeout) clearTimeout(debounceTimeout);
+    setDebounceTimeout(setTimeout(() => fetchCustomers(val), 400));
+  };
+
+  return (
+    <>
+      <AdminHeading 
+        eyebrow="Relationships" 
+        title="Customers" 
+        action={
+          <label className="input input-bordered flex items-center gap-2 input-sm w-64">
+            <Search size={15} className="opacity-60" />
+            <input className="grow" placeholder="Search customers…" value={search} onChange={handleSearch} />
+          </label>
+        } 
+      />
+      <div className="grid md:grid-cols-3 gap-3 mb-5">
+        <Kpi label="Total customers" value={stats.totalCustomers as any} delta="vs last week" icon={<Users />} />
+        <Kpi label="Repeat rate" value={stats.repeatRate as any} delta="vs last week" icon={<ShoppingCart />} tone="secondary" />
+        <Kpi label="Prescriptions saved" value={stats.prescriptionsSaved as any} delta="vs last week" icon={<FileText />} tone="info" />
+      </div>
+      <div className="card bg-base-100 border border-base-300">
+        <div className="card-body p-4">
+          <h2 className="font-bold">Recent customer activity</h2>
+          <div className="overflow-x-auto mt-3">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th>Last order</th>
+                  <th>Lifetime value</th>
+                  <th>Preference</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? <tr><td colSpan={5} className="text-center py-8"><span className="loading loading-spinner" /></td></tr> : 
+                 customers.length === 0 ? <tr><td colSpan={5} className="text-center py-8 text-base-content/60">No customers found</td></tr> :
+                 customers.map((c) => (
+                  <tr key={c._id} className="hover cursor-pointer" onClick={() => setSelectedId(c._id)}>
+                    <td>
+                      <div className="font-semibold">{c.name}</div>
+                      <div className="text-xs text-base-content/60">{c.mobileNumber || c.email}</div>
+                    </td>
+                    <td className="text-sm">{c.lastOrderNumber ? `${c.lastOrderNumber} · ${new Date(c.lastOrderDate).toLocaleDateString()}` : '—'}</td>
+                    <td>{c.lifetimeValue ? `₹${c.lifetimeValue.toLocaleString('en-IN')}` : '—'}</td>
+                    <td className="text-sm text-base-content/60">{c.preference || '—'}</td>
+                    <td><button className="btn btn-ghost btn-xs"><ChevronRight size={15} /></button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      {selectedId && <CustomerDetailDrawer id={selectedId} onClose={() => setSelectedId(null)} />}
+    </>
+  );
+};
 
 const LensAdmin: React.FC<Pick<AdminViewProps, 'toast'>> = ({ toast }) => { const [ack, setAck] = useState<string[]>([]); const lens = [['1.60 Blue-cut', 'Medium', '12', '20'], ['Photochromic Brown', '1.56', '7', '15'], ['Kids Flex Temple', 'Small', '9', '12'], ['Anti-glare Clear', '1.56', '84', '25'], ['Polarised Grey', 'Sun', '42', '20']]; return <><AdminHeading eyebrow="Inventory" title="Lens stock" action={<button className="btn btn-primary" onClick={() => toast('Reorder request sent to suppliers', 'success')}><Plus size={16} /> Create reorder</button>} /><div className="alert alert-warning mb-5"><AlertTriangle size={18} /><div><p className="font-semibold">3 items need attention</p><p className="text-xs">Acknowledge alerts to keep your queue clean. Acknowledged alerts return when stock changes.</p></div></div><div className="card bg-base-100 border border-base-300"><div className="card-body p-4"><div className="flex justify-between items-center"><div><h2 className="font-bold">Lens inventory</h2><p className="text-xs text-base-content/60">Updated 4 minutes ago</p></div><button className="btn btn-ghost btn-sm"><Download size={15} /> Export</button></div><div className="overflow-x-auto mt-3"><table className="table"><thead><tr><th>Lens / material</th><th>Variant</th><th>On hand</th><th>Threshold</th><th>Health</th><th>Action</th></tr></thead><tbody>{lens.map((row) => { const low = Number(row[2]) < Number(row[3]); const isAck = ack.includes(row[0]); return <tr key={row[0]}><td className="font-semibold">{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td><span className={`badge badge-sm ${low && !isAck ? 'badge-warning' : 'badge-success'}`}>{low && !isAck ? 'Low stock' : isAck ? 'Acknowledged' : 'Healthy'}</span></td><td>{low && !isAck ? <button className="btn btn-outline btn-xs" onClick={() => { setAck([...ack, row[0]]); toast(`${row[0]} alert acknowledged`, 'info'); }}>Acknowledge</button> : <span className="text-xs text-base-content/50">No action</span>}</td></tr> })}</tbody></table></div></div></div></> };
 

@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const router = express.Router();
 const Order = require('../models/Order');
 const Frame = require('../models/Frame');
+const User = require('../models/User');
+const PaymentTransaction = require('../models/PaymentTransaction');
 const { requireAuth, requireRole, requirePermission } = require('../middleware/authMiddleware');
 
 // @route   GET /api/orders
@@ -104,7 +106,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 // @desc    Create an order (Checkout)
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const { items, shippingAddress, billingAddress, notes } = req.body;
+    const { items, shippingAddress, billingAddress, notes, amountPaid } = req.body;
     
     if (!items || items.length === 0) {
       return res.status(400).json({ message: 'Order must contain items' });
@@ -166,6 +168,12 @@ router.post('/', requireAuth, async (req, res) => {
 
     const orderNumber = `NYN-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    const paid = amountPaid !== undefined ? Number(amountPaid) : totalAmount;
+    const outstanding = Math.max(0, totalAmount - paid);
+    let pStatus = 'UNPAID';
+    if (paid >= totalAmount) pStatus = 'PAID';
+    else if (paid > 0) pStatus = 'PARTIALLY_PAID';
+
     const newOrder = new Order({
       orderNumber,
       customer: req.user._id,
@@ -178,15 +186,37 @@ router.post('/', requireAuth, async (req, res) => {
       tax,
       shipping,
       totalAmount,
+      amountPaid: paid,
+      outstanding,
       shippingAddress,
       billingAddress,
       notes,
       orderStatus: 'PROCESSING',
-      paymentStatus: 'PAID', // auto paid for prototype
+      paymentStatus: pStatus,
       timeline: [{ status: 'PROCESSING', changedBy: req.user._id }]
     });
 
     const savedOrder = await newOrder.save();
+
+    // Ledger entry
+    const user = await User.findById(req.user._id);
+    const newBalance = (user.outstandingBalance || 0) + outstanding;
+    user.outstandingBalance = newBalance;
+    await user.save();
+
+    await PaymentTransaction.create({
+      customer: user._id,
+      order: savedOrder._id,
+      type: 'PURCHASE',
+      amount: totalAmount,
+      orderTotal: totalAmount,
+      amountPaid: paid,
+      outstandingAmount: newBalance, // This should be the customer's new total running balance
+      paymentMethod: 'Other',
+      notes: `Order ${orderNumber}`,
+      createdBy: req.user._id
+    });
+
     res.status(201).json(savedOrder);
   } catch (error) {
     console.error(error);

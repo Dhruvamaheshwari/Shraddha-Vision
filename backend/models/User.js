@@ -40,6 +40,10 @@ const userSchema = new mongoose.Schema(
     permissions: [{
       type: String,
     }],
+    outstandingBalance: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

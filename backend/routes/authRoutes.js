@@ -156,6 +156,7 @@ router.get('/me', requireAuth, async (req, res) => {
       role: user.role,
       status: user.status,
       permissions: effectivePermissions,
+      outstandingBalance: user.outstandingBalance || 0,
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

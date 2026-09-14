@@ -7,7 +7,7 @@ const authRoutes = require('./routes/authRoutes');
 const staffRoutes = require('./routes/staffRoutes');
 const frameRoutes = require('./routes/frameRoutes');
 const orderRoutes = require('./routes/orderRoutes');
-
+const customerRoutes = require('./routes/customerRoutes');
 const app = express();
 
 // Middleware
@@ -19,6 +19,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/frames', frameRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/customers', customerRoutes);
 
 // Error Handling Middleware
 app.use((err, req, res, next) => {

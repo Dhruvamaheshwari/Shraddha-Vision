@@ -28,7 +28,9 @@ const orderSchema = new mongoose.Schema({
   tax: { type: Number, default: 0 },
   shipping: { type: Number, default: 0 },
   totalAmount: { type: Number, required: true },
-  paymentStatus: { type: String, enum: ['PENDING', 'PAID', 'FAILED', 'REFUNDED'], default: 'PENDING' },
+  amountPaid: { type: Number, default: 0 },
+  outstanding: { type: Number, default: 0 },
+  paymentStatus: { type: String, enum: ['PENDING', 'PAID', 'PARTIALLY_PAID', 'UNPAID', 'FAILED', 'REFUNDED'], default: 'PENDING' },
   orderStatus: { 
     type: String, 
     enum: ['PENDING', 'PROCESSING', 'PACKED', 'READY_FOR_PICKUP', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURN_REQUESTED', 'RETURN_APPROVED', 'RETURN_REJECTED', 'RETURN_PICKED_UP', 'RETURN_RECEIVED', 'REFUND_PENDING', 'REFUNDED'], 
